@@ -1,10 +1,61 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Calculator, Settings, RotateCcw, Shield, Sword, Heart, Activity, ChevronRight, Calculator as CalcIcon } from 'lucide-react';
+import { Calculator, Settings, RotateCcw, Shield, Sword, Heart, Activity, Calculator as CalcIcon, Coins, Save, Trash2, ArrowDownUp, ArrowUp, ArrowDown } from 'lucide-react';
+
+// Define types for saved items
+interface SavedItem {
+  id: number;
+  timestamp: number;
+  growth: number;
+  stats: {
+    damage: number;
+    defense: number;
+    hp: number;
+    str: number;
+    end: number;
+    con: number;
+  };
+  price: number;
+  totalPoints: number;
+  pricePerPoint: number;
+}
+
+// Move StatInput outside of App to prevent re-rendering issues (losing focus)
+const StatInput = ({ 
+  label, 
+  value,
+  onChange,
+  colorClass,
+  placeholder
+}: { 
+  label: string; 
+  value: number; 
+  onChange: (val: string) => void;
+  colorClass: string;
+  placeholder: string;
+}) => (
+  <div>
+    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">
+      {label}
+    </label>
+    <div className="relative">
+      <input
+        type="number"
+        min="0"
+        value={value === 0 ? '' : value} // Show empty string if 0 for better UX, or keep 0 if preferred. Using '' allows typing freely.
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={`w-full px-3 py-2.5 rounded-lg border-2 outline-none transition-all font-mono text-lg ${colorClass}`}
+        onWheel={(e) => e.currentTarget.blur()} // Prevent scrolling changing numbers accidentally
+      />
+    </div>
+  </div>
+);
 
 const App = () => {
   // Only growth affects the conversion of Dmg/Def/HP to attributes
   const [growth, setGrowth] = useState<number>(1.265);
+  const [price, setPrice] = useState<number>(0);
   
   // Focused stats state
   const [stats, setStats] = useState({
@@ -20,78 +71,193 @@ const App = () => {
     strFromDmg: 0,
     endFromDef: 0,
     conFromHp: 0,
-    totalPoints: 0
+    totalPoints: 0,
+    pricePerPoint: 0
   });
+
+  const [savedItems, setSavedItems] = useState<SavedItem[]>([]);
+  
+  // Sorting state
+  const [sortConfig, setSortConfig] = useState<{
+    key: keyof SavedItem | null;
+    direction: 'asc' | 'desc';
+  }>({ key: 'timestamp', direction: 'desc' });
+
+  // Load saved items from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('summoned_beast_calc_items');
+    if (saved) {
+      try {
+        setSavedItems(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to parse saved items', e);
+      }
+    }
+  }, []);
+
+  // Save to localStorage whenever list changes
+  useEffect(() => {
+    localStorage.setItem('summoned_beast_calc_items', JSON.stringify(savedItems));
+  }, [savedItems]);
 
   // Calculation Logic
   useEffect(() => {
     // 1. Strength Conversion
     // Formula: 1 Strength * Growth = 1.333 Damage
     // So: Equivalent Str = (Damage * 4/3) / Growth
-    const strFromDmg = (stats.damage * (4/3)) / growth;
+    const strFromDmg = growth > 0 ? (stats.damage * (4/3)) / growth : 0;
 
     // 2. Endurance Conversion
     // Formula: 1 Endurance * Growth * 1.333 = 1 Defense
     // So: Equivalent End = Defense / (Growth * 4/3)
-    const endFromDef = stats.defense / (growth * (4/3));
+    const endFromDef = growth > 0 ? stats.defense / (growth * (4/3)) : 0;
 
     // 3. Constitution Conversion
     // Formula: 1 Constitution * Growth * 6 = 1 HP
     // So: Equivalent Con = HP / (Growth * 6)
-    const conFromHp = stats.hp / (growth * 6);
+    const conFromHp = growth > 0 ? stats.hp / (growth * 6) : 0;
 
     const totalPoints = 
       (stats.str + strFromDmg) + 
       (stats.end + endFromDef) + 
       (stats.con + conFromHp);
 
+    const pricePerPoint = (price > 0 && totalPoints > 0) ? price / totalPoints : 0;
+
     setResults({
       strFromDmg,
       endFromDef,
       conFromHp,
-      totalPoints
+      totalPoints,
+      pricePerPoint
     });
-  }, [growth, stats]);
+  }, [growth, stats, price]);
+
+  // Memoized sorted items
+  const sortedItems = useMemo(() => {
+    let sortableItems = [...savedItems];
+    if (sortConfig.key !== null) {
+      sortableItems.sort((a, b) => {
+        // @ts-ignore
+        const aValue = a[sortConfig.key];
+        // @ts-ignore
+        const bValue = b[sortConfig.key];
+        
+        if (aValue < bValue) {
+          return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [savedItems, sortConfig]);
+
+  const requestSort = (key: keyof SavedItem) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    
+    // Smart defaults for first click
+    if (sortConfig.key !== key) {
+        if (key === 'totalPoints') direction = 'desc'; // High points is better
+        if (key === 'price') direction = 'asc'; // Low price is better
+        if (key === 'pricePerPoint') direction = 'asc'; // Low cost per point is better
+        if (key === 'timestamp') direction = 'desc'; // Newest is better
+    } else {
+        // Toggle if clicking same key
+        if (sortConfig.direction === 'asc') {
+            direction = 'desc';
+        } else {
+            direction = 'asc';
+        }
+    }
+    
+    setSortConfig({ key, direction });
+  };
 
   const handleStatChange = (key: keyof typeof stats, value: string) => {
+    // Allow empty string for clearing input
+    if (value === '') {
+      setStats(prev => ({ ...prev, [key]: 0 }));
+      return;
+    }
     const num = parseFloat(value);
+    // Prevent negative numbers
+    if (num < 0) return;
     setStats(prev => ({ ...prev, [key]: isNaN(num) ? 0 : num }));
   };
 
+  const handlePriceChange = (value: string) => {
+     if (value === '') {
+      setPrice(0);
+      return;
+    }
+    const num = parseFloat(value);
+    if (num < 0) return;
+    setPrice(isNaN(num) ? 0 : num);
+  };
+
   const resetAll = () => {
-    setGrowth(1.265);
+    // Keep growth as it's a setting, usually doesn't change often
+    setPrice(0);
     setStats({
       damage: 0, defense: 0, hp: 0,
       str: 0, end: 0, con: 0
     });
   };
 
-  const StatInput = ({ 
-    label, 
-    valueKey, 
-    colorClass,
-    placeholder
-  }: { 
-    label: string, 
-    valueKey: keyof typeof stats, 
-    colorClass: string,
-    placeholder: string
-  }) => (
-    <div>
-      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">
-        {label}
-      </label>
-      <div className="relative">
-        <input
-          type="number"
-          value={stats[valueKey] || ''}
-          onChange={(e) => handleStatChange(valueKey, e.target.value)}
-          placeholder={placeholder}
-          className={`w-full px-3 py-2.5 rounded-lg border-2 outline-none transition-all font-mono text-lg ${colorClass}`}
-        />
-      </div>
-    </div>
-  );
+  const saveCurrentItem = () => {
+    if (results.totalPoints <= 0) return;
+
+    const newItem: SavedItem = {
+      id: Date.now(),
+      timestamp: Date.now(),
+      growth,
+      stats: { ...stats },
+      price,
+      totalPoints: results.totalPoints,
+      pricePerPoint: results.pricePerPoint
+    };
+
+    setSavedItems(prev => [newItem, ...prev]);
+  };
+
+  const deleteSavedItem = (id: number) => {
+    setSavedItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  // Helper to format date
+  const formatDate = (ts: number) => {
+    return new Date(ts).toLocaleString('zh-CN', { 
+      month: 'numeric', 
+      day: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
+
+  // Helper component for Sortable Header
+  const SortHeader = ({ label, sortKey, alignRight = false }: { label: string, sortKey: keyof SavedItem, alignRight?: boolean }) => {
+    const isSorted = sortConfig.key === sortKey;
+    return (
+      <th 
+        className={`px-6 py-3 font-medium cursor-pointer hover:bg-gray-100 transition-colors select-none group ${alignRight ? 'text-right' : 'text-left'}`}
+        onClick={() => requestSort(sortKey)}
+      >
+        <div className={`flex items-center gap-1 ${alignRight ? 'justify-end' : 'justify-start'}`}>
+          {label}
+          <div className="flex flex-col text-gray-400">
+            {isSorted ? (
+               sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600" /> : <ArrowDown className="w-3 h-3 text-indigo-600" />
+            ) : (
+               <ArrowDownUp className="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+            )}
+          </div>
+        </div>
+      </th>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
@@ -108,13 +274,23 @@ const App = () => {
               <p className="text-sm text-gray-500">Comprehensive Attribute Value Calculator</p>
             </div>
           </div>
-          <button 
-            onClick={resetAll}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-          >
-            <RotateCcw className="w-4 h-4" />
-            重置
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={saveCurrentItem}
+              disabled={results.totalPoints <= 0}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors shadow-sm ${results.totalPoints > 0 ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-300 cursor-not-allowed'}`}
+            >
+              <Save className="w-4 h-4" />
+              保存记录
+            </button>
+            <button 
+              onClick={resetAll}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              <RotateCcw className="w-4 h-4" />
+              重置
+            </button>
+          </div>
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -122,29 +298,43 @@ const App = () => {
           {/* Left Column: Inputs */}
           <div className="lg:col-span-5 space-y-6">
             
-            {/* Global Settings */}
-            <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-              <div className="flex items-center gap-2 mb-4">
-                <Settings className="w-5 h-5 text-gray-400" />
-                <h2 className="font-bold text-gray-700">基础参数</h2>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">
-                  召唤兽成长 (Growth)
-                </label>
+            {/* Global Settings & Price */}
+            <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-2 gap-4">
+              <div className="col-span-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <Settings className="w-4 h-4 text-gray-400" />
+                  <label className="text-sm font-medium text-gray-700">
+                    召唤兽成长
+                  </label>
+                </div>
                 <input
                   type="number"
                   step="0.001"
+                  min="0"
                   value={growth}
                   onChange={(e) => {
                     const val = parseFloat(e.target.value);
+                    if (val < 0) return;
                     setGrowth(isNaN(val) ? 0 : val);
                   }}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-mono text-lg"
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
                 />
-                <p className="text-xs text-gray-400 mt-2">
-                  * 影响所有属性的换算比例，请准确填写
-                </p>
+              </div>
+              <div className="col-span-1">
+                 <div className="flex items-center gap-2 mb-2">
+                  <Coins className="w-4 h-4 text-gray-400" />
+                  <label className="text-sm font-medium text-gray-700">
+                    装备价格 (RMB)
+                  </label>
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  value={price === 0 ? '' : price}
+                  placeholder="0"
+                  onChange={(e) => handlePriceChange(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none font-mono"
+                />
               </div>
             </section>
 
@@ -160,19 +350,22 @@ const App = () => {
                 <div className="grid grid-cols-1 gap-4">
                   <StatInput 
                     label="伤害 (Damage)" 
-                    valueKey="damage" 
+                    value={stats.damage}
+                    onChange={(val) => handleStatChange('damage', val)}
                     colorClass="bg-green-50/50 border-green-100 focus:border-green-400 focus:ring-green-200 text-green-800"
                     placeholder="0"
                   />
                   <StatInput 
                     label="防御 (Defense)" 
-                    valueKey="defense" 
+                    value={stats.defense}
+                    onChange={(val) => handleStatChange('defense', val)}
                     colorClass="bg-green-50/50 border-green-100 focus:border-green-400 focus:ring-green-200 text-green-800"
                     placeholder="0"
                   />
                   <StatInput 
                     label="气血 (HP)" 
-                    valueKey="hp" 
+                    value={stats.hp}
+                    onChange={(val) => handleStatChange('hp', val)}
                     colorClass="bg-green-50/50 border-green-100 focus:border-green-400 focus:ring-green-200 text-green-800"
                     placeholder="0"
                   />
@@ -188,19 +381,22 @@ const App = () => {
                 <div className="grid grid-cols-3 gap-4">
                   <StatInput 
                     label="力量" 
-                    valueKey="str" 
+                    value={stats.str}
+                    onChange={(val) => handleStatChange('str', val)}
                     colorClass="bg-yellow-50/50 border-yellow-100 focus:border-yellow-400 focus:ring-yellow-200 text-yellow-800"
                     placeholder="0"
                   />
                   <StatInput 
                     label="耐力" 
-                    valueKey="end" 
+                    value={stats.end}
+                    onChange={(val) => handleStatChange('end', val)}
                     colorClass="bg-yellow-50/50 border-yellow-100 focus:border-yellow-400 focus:ring-yellow-200 text-yellow-800"
                     placeholder="0"
                   />
                   <StatInput 
                     label="体质" 
-                    valueKey="con" 
+                    value={stats.con}
+                    onChange={(val) => handleStatChange('con', val)}
                     colorClass="bg-yellow-50/50 border-yellow-100 focus:border-yellow-400 focus:ring-yellow-200 text-yellow-800"
                     placeholder="0"
                   />
@@ -215,25 +411,32 @@ const App = () => {
           <div className="lg:col-span-7 space-y-6">
             
             {/* Main Result Card */}
-            <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl p-8 text-white shadow-xl">
-              <div className="flex items-start justify-between">
+            <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
+              {/* Background Decoration */}
+              <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+              
+              <div className="flex items-start justify-between relative z-10">
                 <div>
                   <h2 className="text-indigo-100 font-medium text-lg mb-1">综合属性总值</h2>
-                  <p className="text-indigo-200 text-sm opacity-80">Total Attribute Points (Str + End + Con)</p>
+                  <p className="text-indigo-200 text-sm opacity-80">Total Attribute Points</p>
                 </div>
-                <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
-                  <CalcIcon className="w-6 h-6 text-white" />
+                <div className="text-right">
+                  <div className="text-indigo-200 text-sm mb-1">性价比 (单点价格)</div>
+                  <div className={`font-mono font-bold text-2xl ${results.pricePerPoint > 0 ? 'text-green-300' : 'text-white/50'}`}>
+                    {results.pricePerPoint > 0 ? `¥${results.pricePerPoint.toFixed(2)}` : '--'}
+                    <span className="text-sm font-normal text-indigo-200 ml-1">/点</span>
+                  </div>
                 </div>
               </div>
               
-              <div className="mt-6 flex items-baseline gap-3">
-                <span className="text-6xl font-bold tracking-tight">
+              <div className="mt-8 flex items-baseline gap-3 relative z-10">
+                <span className="text-7xl font-bold tracking-tight">
                   {results.totalPoints.toFixed(2)}
                 </span>
-                <span className="text-xl text-indigo-200 font-medium">点</span>
+                <span className="text-2xl text-indigo-200 font-medium">点</span>
               </div>
               
-              <div className="mt-8 grid grid-cols-3 gap-4 border-t border-white/10 pt-6">
+              <div className="mt-8 grid grid-cols-3 gap-4 border-t border-white/10 pt-6 relative z-10">
                 <div>
                   <div className="text-indigo-200 text-xs uppercase tracking-wider mb-1">物理系贡献</div>
                   <div className="text-2xl font-bold">{(stats.str + results.strFromDmg).toFixed(1)}</div>
@@ -251,95 +454,118 @@ const App = () => {
 
             {/* Formula Breakdown */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="p-6 border-b border-gray-100 bg-gray-50/50">
-                <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                  <Calculator className="w-5 h-5 text-gray-500" />
-                  计算公式详解
-                </h3>
+              <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                 <div className="flex items-center justify-between cursor-pointer group">
+                  <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm">
+                    <Calculator className="w-4 h-4 text-gray-500" />
+                    当前计算详情
+                  </h3>
+                 </div>
               </div>
               
-              <div className="divide-y divide-gray-100">
+              <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-100">
                 
                 {/* Str Breakdown */}
-                <div className="p-6 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 bg-orange-100 rounded-lg text-orange-600">
-                      <Sword className="w-5 h-5" />
-                    </div>
-                    <span className="font-bold text-gray-700">力量 (Strength)</span>
-                    <span className="ml-auto font-mono font-bold text-lg text-gray-800">
-                      {(stats.str + results.strFromDmg).toFixed(2)}
+                <div className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                    <span className="font-bold text-gray-700 text-sm">力量</span>
+                    <span className="ml-auto font-mono font-bold text-gray-800">
+                      {(stats.str + results.strFromDmg).toFixed(1)}
                     </span>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-3 font-mono text-sm text-gray-600 space-y-2">
-                    <div className="flex justify-between">
-                      <span>基础力量:</span>
-                      <span>{stats.str}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-orange-600">
-                      <span>伤害转化:</span>
-                      <span>{stats.damage} × 1.333 ÷ {growth} = {results.strFromDmg.toFixed(2)}</span>
-                    </div>
-                    <div className="text-xs text-gray-400 pt-1 border-t border-gray-200 mt-2">
-                      公式: 装备伤害 × (4/3) ÷ 成长
-                    </div>
+                  <div className="text-xs text-gray-500">
+                    基{stats.str} + 换{(results.strFromDmg).toFixed(1)}
                   </div>
                 </div>
 
                 {/* End Breakdown */}
-                <div className="p-6 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 bg-yellow-100 rounded-lg text-yellow-600">
-                      <Shield className="w-5 h-5" />
-                    </div>
-                    <span className="font-bold text-gray-700">耐力 (Endurance)</span>
-                    <span className="ml-auto font-mono font-bold text-lg text-gray-800">
-                      {(stats.end + results.endFromDef).toFixed(2)}
+                <div className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
+                    <span className="font-bold text-gray-700 text-sm">耐力</span>
+                    <span className="ml-auto font-mono font-bold text-gray-800">
+                      {(stats.end + results.endFromDef).toFixed(1)}
                     </span>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-3 font-mono text-sm text-gray-600 space-y-2">
-                    <div className="flex justify-between">
-                      <span>基础耐力:</span>
-                      <span>{stats.end}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-yellow-600">
-                      <span>防御转化:</span>
-                      <span>{stats.defense} ÷ ({growth} × 1.333) = {results.endFromDef.toFixed(2)}</span>
-                    </div>
-                    <div className="text-xs text-gray-400 pt-1 border-t border-gray-200 mt-2">
-                      公式: 装备防御 ÷ (成长 × 4/3)
-                    </div>
+                  <div className="text-xs text-gray-500">
+                    基{stats.end} + 换{(results.endFromDef).toFixed(1)}
                   </div>
                 </div>
 
                 {/* Con Breakdown */}
-                <div className="p-6 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 bg-red-100 rounded-lg text-red-600">
-                      <Heart className="w-5 h-5" />
-                    </div>
-                    <span className="font-bold text-gray-700">体质 (Constitution)</span>
-                    <span className="ml-auto font-mono font-bold text-lg text-gray-800">
-                      {(stats.con + results.conFromHp).toFixed(2)}
+                <div className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                    <span className="font-bold text-gray-700 text-sm">体质</span>
+                    <span className="ml-auto font-mono font-bold text-gray-800">
+                      {(stats.con + results.conFromHp).toFixed(1)}
                     </span>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-3 font-mono text-sm text-gray-600 space-y-2">
-                    <div className="flex justify-between">
-                      <span>基础体质:</span>
-                      <span>{stats.con}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-red-600">
-                      <span>气血转化:</span>
-                      <span>{stats.hp} ÷ ({growth} × 6) = {results.conFromHp.toFixed(2)}</span>
-                    </div>
-                    <div className="text-xs text-gray-400 pt-1 border-t border-gray-200 mt-2">
-                      公式: 装备气血 ÷ (成长 × 6)
-                    </div>
+                  <div className="text-xs text-gray-500">
+                    基{stats.con} + 换{(results.conFromHp).toFixed(1)}
                   </div>
                 </div>
 
               </div>
             </div>
+
+            {/* Comparison Table */}
+            {savedItems.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                 <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                  <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                    <ArrowDownUp className="w-5 h-5 text-gray-500" />
+                    性价比对比列表
+                  </h3>
+                  <span className="text-xs text-gray-500">点击表头可排序</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b">
+                      <tr>
+                        <th className="px-6 py-3 font-medium">成长</th>
+                        <SortHeader label="总属性" sortKey="totalPoints" />
+                        <SortHeader label="价格" sortKey="price" />
+                        <SortHeader label="单价/点" sortKey="pricePerPoint" />
+                        <SortHeader label="时间" sortKey="timestamp" />
+                        <th className="px-6 py-3 font-medium text-right">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {sortedItems.map((item) => (
+                        <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4 font-mono">{item.growth}</td>
+                          <td className="px-6 py-4 font-bold text-indigo-700">{item.totalPoints.toFixed(2)}</td>
+                          <td className="px-6 py-4 font-mono">¥{item.price}</td>
+                          <td className="px-6 py-4">
+                            {item.pricePerPoint > 0 ? (
+                              <span className="bg-green-100 text-green-800 px-2 py-1 rounded-md font-bold font-mono text-xs">
+                                ¥{item.pricePerPoint.toFixed(2)}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">--</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-gray-500 text-xs whitespace-nowrap">
+                            {formatDate(item.timestamp)}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button 
+                              onClick={() => deleteSavedItem(item.id)}
+                              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              title="删除"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
           </div>
 
