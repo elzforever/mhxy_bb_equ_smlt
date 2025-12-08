@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Calculator, Settings, RotateCcw, Shield, Sword, Heart, Activity, Calculator as CalcIcon, Coins, Save, Trash2, ArrowDownUp, ArrowUp, ArrowDown } from 'lucide-react';
+import { Calculator, Settings, RotateCcw, Shield, Sword, Heart, Activity, Calculator as CalcIcon, Coins, Save, Trash2, ArrowDownUp, ArrowUp, ArrowDown, Shirt, Watch } from 'lucide-react';
 
 // Define types for saved items
+type ItemType = 'armor' | 'accessory';
+
 interface SavedItem {
   id: number;
   timestamp: number;
@@ -18,6 +20,7 @@ interface SavedItem {
   price: number;
   totalPoints: number;
   pricePerPoint: number;
+  type: ItemType;
 }
 
 // Move StatInput outside of App to prevent re-rendering issues (losing focus)
@@ -54,7 +57,8 @@ const StatInput = ({
 
 const App = () => {
   // Only growth affects the conversion of Dmg/Def/HP to attributes
-  const [growth, setGrowth] = useState<number>(1.265);
+  // Default growth updated to 1.297
+  const [growth, setGrowth] = useState<number>(1.297);
   const [price, setPrice] = useState<number>(0);
   
   // Focused stats state
@@ -81,14 +85,23 @@ const App = () => {
   const [sortConfig, setSortConfig] = useState<{
     key: keyof SavedItem | null;
     direction: 'asc' | 'desc';
-  }>({ key: 'timestamp', direction: 'desc' });
+  }>({ key: 'totalPoints', direction: 'desc' }); // Default sort by total points
+
+  // Tab state for comparison
+  const [activeTab, setActiveTab] = useState<ItemType>('armor');
 
   // Load saved items from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem('summoned_beast_calc_items');
     if (saved) {
       try {
-        setSavedItems(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        // Backfill type for old items
+        const migrated = parsed.map((item: any) => ({
+          ...item,
+          type: item.type || (item.stats.defense > 0 ? 'armor' : 'accessory')
+        }));
+        setSavedItems(migrated);
       } catch (e) {
         console.error('Failed to parse saved items', e);
       }
@@ -133,11 +146,16 @@ const App = () => {
     });
   }, [growth, stats, price]);
 
+  // Determine current item type based on defense input
+  const currentType: ItemType = stats.defense > 0 ? 'armor' : 'accessory';
+
   // Memoized sorted items
   const sortedItems = useMemo(() => {
-    let sortableItems = [...savedItems];
+    // Filter by active tab first
+    let filteredItems = savedItems.filter(item => item.type === activeTab);
+    
     if (sortConfig.key !== null) {
-      sortableItems.sort((a, b) => {
+      filteredItems.sort((a, b) => {
         // @ts-ignore
         const aValue = a[sortConfig.key];
         // @ts-ignore
@@ -152,8 +170,8 @@ const App = () => {
         return 0;
       });
     }
-    return sortableItems;
-  }, [savedItems, sortConfig]);
+    return filteredItems;
+  }, [savedItems, sortConfig, activeTab]);
 
   const requestSort = (key: keyof SavedItem) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -210,6 +228,8 @@ const App = () => {
   const saveCurrentItem = () => {
     if (results.totalPoints <= 0) return;
 
+    const type = stats.defense > 0 ? 'armor' : 'accessory';
+
     const newItem: SavedItem = {
       id: Date.now(),
       timestamp: Date.now(),
@@ -217,10 +237,13 @@ const App = () => {
       stats: { ...stats },
       price,
       totalPoints: results.totalPoints,
-      pricePerPoint: results.pricePerPoint
+      pricePerPoint: results.pricePerPoint,
+      type
     };
 
     setSavedItems(prev => [newItem, ...prev]);
+    // Switch tab to the type of the item just saved so user can see it
+    setActiveTab(type);
   };
 
   const deleteSavedItem = (id: number) => {
@@ -339,8 +362,28 @@ const App = () => {
             </section>
 
             {/* Equipment Inputs */}
-            <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-8">
-              
+            <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-8 relative">
+              {/* Auto-detected Type Badge */}
+               <div className="absolute top-6 right-6 pointer-events-none">
+                <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border shadow-sm transition-all ${
+                  currentType === 'armor' 
+                    ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                    : 'bg-orange-50 text-orange-700 border-orange-200'
+                }`}>
+                  {currentType === 'armor' ? (
+                    <>
+                      <Shirt className="w-3 h-3" />
+                      铠甲 (Armor)
+                    </>
+                  ) : (
+                    <>
+                      <Watch className="w-3 h-3" />
+                      护腕/项圈 (Acc)
+                    </>
+                  )}
+                </div>
+              </div>
+
               {/* Green Stats */}
               <div>
                 <div className="flex items-center gap-2 mb-4">
@@ -511,15 +554,50 @@ const App = () => {
             </div>
 
             {/* Comparison Table */}
-            {savedItems.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                 <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
-                  <h3 className="font-bold text-gray-800 flex items-center gap-2">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-[400px]">
+               {/* Table Header with Tabs */}
+               <div className="border-b border-gray-100 bg-gray-50/50">
+                <div className="flex items-center justify-between p-4 pb-0">
+                  <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4">
                     <ArrowDownUp className="w-5 h-5 text-gray-500" />
-                    性价比对比列表
+                    性价比对比
                   </h3>
-                  <span className="text-xs text-gray-500">点击表头可排序</span>
+                  
+                  {/* Category Tabs */}
+                  <div className="flex bg-gray-200/50 p-1 rounded-lg">
+                    <button
+                      onClick={() => setActiveTab('armor')}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                        activeTab === 'armor' 
+                          ? 'bg-white text-indigo-600 shadow-sm' 
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      <Shirt className="w-4 h-4" />
+                      铠甲
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('accessory')}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                        activeTab === 'accessory' 
+                          ? 'bg-white text-indigo-600 shadow-sm' 
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      <Watch className="w-4 h-4" />
+                      护腕 / 项圈
+                    </button>
+                  </div>
                 </div>
+                
+                <div className="px-6 py-2 text-xs text-gray-400 bg-gray-50/30">
+                  {activeTab === 'armor' 
+                    ? '显示所有包含防御属性的铠甲记录' 
+                    : '显示所有护腕和项圈记录 (无防御属性)'}
+                </div>
+              </div>
+
+              {sortedItems.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-left">
                     <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b">
@@ -564,8 +642,18 @@ const App = () => {
                     </tbody>
                   </table>
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                  <div className="bg-gray-100 p-4 rounded-full mb-3">
+                    {activeTab === 'armor' ? <Shirt className="w-6 h-6" /> : <Watch className="w-6 h-6" />}
+                  </div>
+                  <p>暂无{activeTab === 'armor' ? '铠甲' : '护腕/项圈'}记录</p>
+                  <p className="text-xs mt-1">
+                    {activeTab === 'armor' ? '输入防御属性 > 0 后保存' : '输入防御属性 = 0 后保存'}
+                  </p>
+                </div>
+              )}
+            </div>
 
           </div>
 
