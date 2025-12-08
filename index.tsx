@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { Calculator, Settings, RotateCcw, Shield, Sword, Heart, Activity, Calculator as CalcIcon, Coins, Save, Trash2, ArrowDownUp, ArrowUp, ArrowDown, Shirt, Watch, Wind, Zap } from 'lucide-react';
 
 // Define types for saved items
-type ItemType = 'armor' | 'accessory';
+// Updated to separate collar and bracer
+type ItemType = 'armor' | 'collar' | 'bracer';
 
 interface SavedItem {
   id: number;
@@ -107,17 +108,29 @@ const App = () => {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // Backfill type and new stats for old items
-        const migrated = parsed.map((item: any) => ({
-          ...item,
-          speedQual: item.speedQual || 1400,
-          stats: {
-            ...item.stats,
-            speed: item.stats.speed || 0,
-            agi: item.stats.agi || 0
-          },
-          type: item.type || (item.stats.defense > 0 ? 'armor' : 'accessory')
-        }));
+        // Migration logic for old items
+        const migrated = parsed.map((item: any) => {
+          let newType: ItemType = item.type;
+          
+          // Fix for old generic 'accessory' type or missing type
+          // If it was 'accessory', split it based on stats
+          if (!newType || newType === 'accessory' as any) {
+            if ((item.stats?.defense || 0) > 0) newType = 'armor';
+            else if ((item.stats?.speed || 0) > 0) newType = 'collar';
+            else newType = 'bracer';
+          }
+
+          return {
+            ...item,
+            speedQual: item.speedQual || 1400,
+            stats: {
+              ...item.stats,
+              speed: item.stats.speed || 0,
+              agi: item.stats.agi || 0
+            },
+            type: newType
+          };
+        });
         setSavedItems(migrated);
       } catch (e) {
         console.error('Failed to parse saved items', e);
@@ -181,7 +194,7 @@ const App = () => {
 
   // Memoized sorted items
   const sortedItems = useMemo(() => {
-    // Filter by active tab first
+    // Filter by active tab
     let filteredItems = savedItems.filter(item => item.type === activeTab);
     
     if (sortConfig.key !== null) {
@@ -258,7 +271,10 @@ const App = () => {
   const saveCurrentItem = () => {
     if (results.totalPoints <= 0) return;
 
-    const type = stats.defense > 0 ? 'armor' : 'accessory';
+    let type: ItemType = 'bracer';
+    if (stats.defense > 0) type = 'armor';
+    else if (stats.speed > 0) type = 'collar';
+    // else default to bracer
 
     const newItem: SavedItem = {
       id: Date.now(),
@@ -339,6 +355,26 @@ const App = () => {
         </div>
       </th>
     );
+  };
+
+  // Get tab styles
+  const getTabStyle = (tab: ItemType) => {
+    const isActive = activeTab === tab;
+    return `flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+      isActive 
+        ? 'bg-white text-indigo-600 shadow-sm' 
+        : 'text-gray-500 hover:text-gray-700'
+    }`;
+  };
+
+  // Get Empty State Description
+  const getEmptyStateDesc = () => {
+      switch(activeTab) {
+          case 'armor': return '暂无铠甲记录 (防御 > 0)';
+          case 'collar': return '暂无项圈记录 (速度 > 0, 防御 = 0)';
+          case 'bracer': return '暂无护腕记录 (防御 = 0, 速度 = 0)';
+          default: return '暂无记录';
+      }
   };
 
   return (
@@ -671,33 +707,32 @@ const App = () => {
                   <div className="flex bg-gray-200/50 p-1 rounded-lg">
                     <button
                       onClick={() => setActiveTab('armor')}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                        activeTab === 'armor' 
-                          ? 'bg-white text-indigo-600 shadow-sm' 
-                          : 'text-gray-500 hover:text-gray-700'
-                      }`}
+                      className={getTabStyle('armor')}
                     >
                       <Shirt className="w-4 h-4" />
                       铠甲
                     </button>
                     <button
-                      onClick={() => setActiveTab('accessory')}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                        activeTab === 'accessory' 
-                          ? 'bg-white text-indigo-600 shadow-sm' 
-                          : 'text-gray-500 hover:text-gray-700'
-                      }`}
+                      onClick={() => setActiveTab('collar')}
+                      className={getTabStyle('collar')}
+                    >
+                      <Wind className="w-4 h-4" />
+                      项圈
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('bracer')}
+                      className={getTabStyle('bracer')}
                     >
                       <Watch className="w-4 h-4" />
-                      护腕 / 项圈
+                      护腕
                     </button>
                   </div>
                 </div>
                 
                 <div className="px-6 py-2 text-xs text-gray-400 bg-gray-50/30">
-                  {activeTab === 'armor' 
-                    ? '显示所有包含防御属性的铠甲记录' 
-                    : '显示所有护腕和项圈记录 (无防御属性)'}
+                  {activeTab === 'armor' ? '显示防御属性 > 0 的铠甲' : 
+                   activeTab === 'collar' ? '显示速度属性 > 0 的项圈' :
+                   '显示无防御且无速度属性的护腕'}
                 </div>
               </div>
 
@@ -758,12 +793,11 @@ const App = () => {
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-gray-400">
                   <div className="bg-gray-100 p-4 rounded-full mb-3">
-                    {activeTab === 'armor' ? <Shirt className="w-6 h-6" /> : <Watch className="w-6 h-6" />}
+                    {activeTab === 'armor' && <Shirt className="w-6 h-6" />}
+                    {activeTab === 'collar' && <Wind className="w-6 h-6" />}
+                    {activeTab === 'bracer' && <Watch className="w-6 h-6" />}
                   </div>
-                  <p>暂无{activeTab === 'armor' ? '铠甲' : '护腕/项圈'}记录</p>
-                  <p className="text-xs mt-1">
-                    {activeTab === 'armor' ? '输入防御属性 > 0 后保存' : '输入防御属性 = 0 后保存'}
-                  </p>
+                  <p>{getEmptyStateDesc()}</p>
                 </div>
               )}
             </div>
@@ -788,10 +822,10 @@ const App = () => {
             <div className="flex items-center justify-between mb-3 border-b border-gray-100 pb-2">
               <span className={`text-xs font-bold uppercase tracking-wider ${
                 hoveredItem.type === 'armor' ? 'text-blue-600' : 
-                (hoveredItem.stats.speed > 0 && hoveredItem.stats.defense === 0) ? 'text-cyan-600' : 'text-orange-600'
+                hoveredItem.type === 'collar' ? 'text-cyan-600' : 'text-orange-600'
               }`}>
                 {hoveredItem.type === 'armor' ? '铠甲' : 
-                 (hoveredItem.stats.speed > 0 ? '项圈' : '护腕/项圈')}
+                 hoveredItem.type === 'collar' ? '项圈' : '护腕'}
               </span>
               <div className="text-right">
                 <div className="text-xs text-gray-400 font-mono">成长: {hoveredItem.growth}</div>
