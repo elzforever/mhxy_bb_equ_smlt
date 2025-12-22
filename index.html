@@ -3,26 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>梦幻西游召唤兽装备计算器</title>
+    <title>梦幻高级工具箱 - 召唤兽装备数据中心</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        background-color: #f3f4f6;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
       }
-      .input-label {
-        font-size: 0.875rem;
-        font-weight: 500;
-        color: #374151;
-        margin-bottom: 0.25rem;
-        display: block;
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 6px;
       }
-      .stat-input {
-        transition: all 0.2s;
+      ::-webkit-scrollbar-track {
+        background: transparent;
       }
-      .stat-input:focus {
-        ring: 2px solid #3b82f6;
-        border-color: #3b82f6;
+      ::-webkit-scrollbar-thumb {
+        background: #e2e8f0;
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #cbd5e1;
       }
     </style>
   <script type="importmap">

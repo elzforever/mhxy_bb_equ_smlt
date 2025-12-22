@@ -1,10 +1,18 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Calculator, Settings, RotateCcw, Shield, Sword, Heart, Activity, Calculator as CalcIcon, Coins, Save, Trash2, ArrowDownUp, ArrowUp, ArrowDown, Shirt, Watch, Wind, Zap } from 'lucide-react';
+import { 
+  Calculator, Settings, RotateCcw, Activity, Coins, Save, Trash2, 
+  ArrowDownUp, ArrowUp, ArrowDown, Shirt, Watch, Wind, Download, 
+  Upload, Home, LayoutDashboard, Sparkles, BookOpen, ChevronRight,
+  Menu, X, ExternalLink, Gem, Diamond, Swords, ShieldCheck, Users, HelpCircle, Eye, History as HistoryIcon
+} from 'lucide-react';
 
-// Define types for saved items
-// Updated to separate collar and bracer
+// --- Types & Interfaces ---
+
 type ItemType = 'armor' | 'collar' | 'bracer';
+type RaceType = 'human' | 'demon' | 'immortal';
+type SpiritType = 'ring' | 'earring';
+type SubAttrType = 'damage' | 'speed';
 
 interface SavedItem {
   id: number;
@@ -12,14 +20,8 @@ interface SavedItem {
   growth: number;
   speedQual: number;
   stats: {
-    damage: number;
-    defense: number;
-    hp: number;
-    speed: number;
-    str: number;
-    end: number;
-    con: number;
-    agi: number;
+    damage: number; defense: number; hp: number; speed: number;
+    str: number; end: number; con: number; agi: number;
   };
   price: number;
   totalPoints: number;
@@ -27,860 +29,918 @@ interface SavedItem {
   type: ItemType;
 }
 
-// Move StatInput outside of App to prevent re-rendering issues (losing focus)
-const StatInput = ({ 
-  label, 
-  value,
-  onChange,
-  colorClass,
-  placeholder
-}: { 
-  label: string; 
-  value: number; 
-  onChange: (val: string) => void;
-  colorClass: string;
-  placeholder: string;
-}) => (
+interface SavedSpiritItem {
+  id: number;
+  timestamp: number;
+  race: RaceType;
+  spiritType: SpiritType;
+  mainAttr: { type: string; value: number };
+  subAttrs: { type: SubAttrType; value: number }[];
+  gemLevel: number;
+  price: number;
+  totalPoints: number;
+  pricePerPoint: number;
+}
+
+// --- Constants ---
+
+const RACE_FACTORS = {
+  human: { strToDmg: 0.67, agiToSpd: 0.7, endToDef: 1.5, label: '人族' },
+  demon: { strToDmg: 0.77, agiToSpd: 0.7, endToDef: 1.4, label: '魔族' },
+  immortal: { strToDmg: 0.57, agiToSpd: 0.7, endToDef: 1.6, label: '仙族' }
+};
+
+const MAIN_ATTR_LABELS: Record<string, string> = {
+  'damage': '伤害',
+  'defense': '防御',
+  'm-dmg': '法术伤害',
+  'm-def': '法术防御'
+};
+
+// --- Sub-Components ---
+
+const StatInput = ({ label, value, onChange, colorClass, placeholder }: any) => (
   <div>
     <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">
       {label}
     </label>
-    <div className="relative">
-      <input
-        type="number"
-        min="0"
-        value={value === 0 ? '' : value} // Show empty string if 0 for better UX, or keep 0 if preferred. Using '' allows typing freely.
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={`w-full px-3 py-2.5 rounded-lg border-2 outline-none transition-all font-mono text-lg ${colorClass}`}
-        onWheel={(e) => e.currentTarget.blur()} // Prevent scrolling changing numbers accidentally
-      />
-    </div>
+    <input
+      type="number"
+      min="0"
+      value={value === 0 ? '' : value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className={`w-full px-3 py-2.5 rounded-lg border-2 outline-none transition-all font-mono text-lg ${colorClass}`}
+      onWheel={(e) => e.currentTarget.blur()}
+    />
   </div>
 );
 
-const App = () => {
-  // Only growth affects the conversion of Dmg/Def/HP to attributes
-  // Default growth updated to 1.297
-  const [growth, setGrowth] = useState<number>(1.297);
-  const [speedQual, setSpeedQual] = useState<number>(1400); // Default speed qualification
-  const [price, setPrice] = useState<number>(0);
-  
-  // Focused stats state
-  const [stats, setStats] = useState({
-    damage: 0, // Base (Yellow)
-    defense: 0, // Base (Yellow)
-    hp: 0,    // Base (Yellow)
-    speed: 0, // Base (Yellow)
-    str: 0,   // Additional (Green)
-    end: 0,   // Additional (Green)
-    con: 0,   // Additional (Green)
-    agi: 0    // Additional (Green)
-  });
+// --- Tool 2: Spirit Accessory Calculator ---
 
-  const [results, setResults] = useState({
-    strFromDmg: 0,
-    endFromDef: 0,
-    conFromHp: 0,
-    agiFromSpeed: 0,
-    totalPoints: 0,
-    pricePerPoint: 0
+const SpiritAccessoryTool = () => {
+  const [race, setRace] = useState<RaceType>('human');
+  const [spiritType, setSpiritType] = useState<SpiritType>('ring');
+  const [mainAttr, setMainAttr] = useState({ type: 'damage', value: 0 });
+  const [subAttrs, setSubAttrs] = useState<{ type: SubAttrType; value: number }[]>([
+    { type: 'damage', value: 0 },
+    { type: 'damage', value: 0 }
+  ]);
+  const [gemLevel, setGemLevel] = useState(0);
+  const [price, setPrice] = useState(0);
+  const [savedItems, setSavedItems] = useState<SavedSpiritItem[]>([]);
+  
+  // New States for History
+  const [historyTab, setHistoryTab] = useState<SpiritType>('ring');
+  const [sortOrder, setSortOrder] = useState<'time' | 'points'>('time');
+  const [hoveredId, setHoveredId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('spirit_calc_items');
+    if (saved) setSavedItems(JSON.parse(saved));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('spirit_calc_items', JSON.stringify(savedItems));
+  }, [savedItems]);
+
+  const results = useMemo(() => {
+    const factor = RACE_FACTORS[race];
+    let totalDmg = (mainAttr.type === 'damage' ? mainAttr.value : 0);
+    let totalDef = (mainAttr.type === 'defense' ? mainAttr.value : 0);
+    let totalSpd = 0;
+
+    subAttrs.forEach(attr => {
+      if (attr.type === 'damage') totalDmg += attr.value + (gemLevel * 4);
+      else if (attr.type === 'speed') totalSpd += attr.value + (gemLevel * 3);
+    });
+
+    const eqStr = totalDmg / factor.strToDmg;
+    const eqAgi = totalSpd / factor.agiToSpd;
+    const eqEnd = totalDef / factor.endToDef;
+    const totalPoints = eqStr + eqAgi + eqEnd;
+    const pricePerPoint = (price > 0 && totalPoints > 0) ? price / totalPoints : 0;
+
+    return { totalDmg, totalSpd, totalDef, eqStr, eqAgi, eqEnd, totalPoints, pricePerPoint, factor };
+  }, [race, mainAttr, subAttrs, gemLevel, price]);
+
+  const saveItem = () => {
+    if (results.totalPoints <= 0) return;
+    const newItem: SavedSpiritItem = {
+      id: Date.now(),
+      timestamp: Date.now(),
+      race,
+      spiritType,
+      mainAttr: { ...mainAttr },
+      subAttrs: subAttrs.map(a => ({ ...a })),
+      gemLevel,
+      price,
+      totalPoints: results.totalPoints,
+      pricePerPoint: results.pricePerPoint
+    };
+    setSavedItems([newItem, ...savedItems]);
+    setHistoryTab(spiritType);
+  };
+
+  const filteredAndSortedHistory = useMemo(() => {
+    let list = savedItems.filter(item => item.spiritType === historyTab);
+    if (sortOrder === 'points') {
+      list.sort((a, b) => b.totalPoints - a.totalPoints);
+    } else {
+      list.sort((a, b) => b.timestamp - a.timestamp);
+    }
+    return list;
+  }, [savedItems, historyTab, sortOrder]);
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Left: Input */}
+        <div className="lg:w-1/2">
+          <section className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 space-y-8 h-full">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <h3 className="font-black text-gray-800 flex items-center gap-3 text-lg">
+                <Diamond className="w-6 h-6 text-purple-600" />
+                灵饰属性配置
+              </h3>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                  <Users className="w-4 h-4 text-indigo-400" />
+                </div>
+                <select 
+                  value={race} 
+                  onChange={e => setRace(e.target.value as RaceType)} 
+                  className="pl-9 pr-8 py-3 bg-indigo-50 text-indigo-700 rounded-xl font-bold outline-none border border-indigo-100 hover:border-indigo-300 transition-all appearance-none text-sm min-w-[160px]"
+                >
+                  <option value="human">人族 (Str:0.67)</option>
+                  <option value="demon">魔族 (Str:0.77)</option>
+                  <option value="immortal">仙族 (Str:0.57)</option>
+                </select>
+                <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                  <ArrowDown className="w-3 h-3 text-indigo-400" />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="text-xs font-black text-gray-400 uppercase tracking-widest block mb-3">部位选择</label>
+                <div className="flex bg-gray-100 p-1.5 rounded-2xl">
+                  {['ring', 'earring'].map(t => (
+                    <button 
+                      key={t} 
+                      onClick={() => {
+                        setSpiritType(t as SpiritType);
+                        setMainAttr({ type: t === 'ring' ? 'damage' : 'm-dmg', value: 0 });
+                      }} 
+                      className={`flex-1 py-3 rounded-xl text-sm font-black transition-all ${spiritType === t ? 'bg-white shadow-md text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      {t === 'ring' ? '戒指' : '耳饰'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-black text-gray-400 uppercase tracking-widest block mb-3">星辉石等级</label>
+                <div className="relative">
+                  <select 
+                    value={gemLevel} 
+                    onChange={e => setGemLevel(parseInt(e.target.value))} 
+                    className="w-full pl-4 pr-10 py-3.5 bg-gray-100 border-none rounded-2xl font-mono text-base font-bold outline-none appearance-none hover:bg-gray-200 transition-colors"
+                  >
+                    {Array.from({length: 12}).map((_, i) => <option key={i} value={i}>{i} 级星辉石</option>)}
+                  </select>
+                  <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none">
+                    <Gem className="w-4 h-4 text-gray-400" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 bg-gradient-to-br from-gray-50 to-white rounded-3xl border-2 border-dashed border-gray-200 relative group">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
+                <span className="text-xs font-black text-gray-400 uppercase tracking-widest">上排主属性</span>
+                <div className="relative">
+                  <select 
+                    value={mainAttr.type} 
+                    onChange={e => setMainAttr({...mainAttr, type: e.target.value})} 
+                    className="pl-4 pr-10 py-2.5 bg-white border border-gray-200 rounded-xl font-bold text-sm outline-none shadow-sm hover:border-indigo-400 transition-all appearance-none min-w-[140px]"
+                  >
+                    {spiritType === 'ring' ? (
+                      <>
+                        <option value="damage">伤害 (Damage)</option>
+                        <option value="defense">防御 (Defense)</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="m-dmg">法术伤害</option>
+                        <option value="m-def">法术防御</option>
+                      </>
+                    )}
+                  </select>
+                  <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                    <ArrowDownUp className="w-3 h-3 text-gray-400" />
+                  </div>
+                </div>
+              </div>
+              <input 
+                type="number" 
+                value={mainAttr.value || ''} 
+                onChange={e => setMainAttr({...mainAttr, value: parseFloat(e.target.value) || 0})} 
+                className="w-full bg-transparent text-5xl font-black font-mono text-gray-800 outline-none placeholder:text-gray-100 tracking-tighter" 
+                placeholder="0" 
+              />
+            </div>
+
+            <div className="space-y-5">
+               <div className="flex items-center justify-between">
+                 <span className="text-xs font-black text-gray-400 uppercase tracking-widest">下排附加属性</span>
+                 <button onClick={() => {
+                   if (subAttrs.length < 3) setSubAttrs([...subAttrs, { type: 'damage', value: 0 }]);
+                 }} disabled={subAttrs.length >= 3} className="px-3 py-1.5 bg-indigo-50 text-[11px] font-black text-indigo-600 rounded-lg hover:bg-indigo-100 disabled:bg-gray-50 disabled:text-gray-300 transition-all uppercase">+ 新增属性</button>
+               </div>
+               <div className="space-y-4">
+                 {subAttrs.map((attr, idx) => (
+                   <div key={idx} className="flex gap-4 items-center group animate-in slide-in-from-right-2">
+                      <select 
+                        value={attr.type} 
+                        onChange={e => {
+                          const newAttrs = [...subAttrs];
+                          newAttrs[idx].type = e.target.value as SubAttrType;
+                          setSubAttrs(newAttrs);
+                        }} 
+                        className="bg-gray-100 px-4 py-3.5 rounded-2xl text-sm font-bold outline-none border-none min-w-[100px] hover:bg-gray-200 transition-colors"
+                      >
+                        <option value="damage">伤害</option>
+                        <option value="speed">速度</option>
+                      </select>
+                      <div className="flex-1 relative">
+                        <input 
+                          type="number" 
+                          value={attr.value || ''} 
+                          onChange={e => {
+                            const newAttrs = [...subAttrs];
+                            newAttrs[idx].value = parseFloat(e.target.value) || 0;
+                            setSubAttrs(newAttrs);
+                          }} 
+                          className="w-full px-5 py-3.5 bg-gray-100 rounded-2xl font-mono text-xl font-bold outline-none border-none hover:bg-gray-200 transition-colors" 
+                          placeholder="0" 
+                        />
+                        {gemLevel > 0 && (
+                          <div className="absolute right-5 top-1/2 -translate-y-1/2 text-xs font-black text-green-500 bg-white/80 backdrop-blur px-2 py-1 rounded-lg border border-green-100 shadow-sm">
+                            +{gemLevel * (attr.type === 'damage' ? 4 : 3)}
+                          </div>
+                        )}
+                      </div>
+                      {subAttrs.length > 2 && (
+                        <button onClick={() => setSubAttrs(subAttrs.filter((_, i) => i !== idx))} className="p-3 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 bg-red-50 rounded-xl">
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      )}
+                   </div>
+                 ))}
+               </div>
+            </div>
+
+            <div className="pt-6 space-y-4 border-t border-gray-100">
+              <div className="flex items-center gap-2">
+                <Coins className="w-5 h-5 text-amber-500" />
+                <label className="text-xs font-black text-gray-400 uppercase tracking-widest">预算价格 (RMB)</label>
+              </div>
+              <input 
+                type="number" 
+                value={price || ''} 
+                onChange={e => setPrice(parseFloat(e.target.value) || 0)} 
+                className="w-full px-6 py-4 bg-amber-50 border border-amber-100 rounded-3xl text-3xl font-mono font-black text-amber-900 outline-none focus:ring-4 focus:ring-amber-500/10 transition-all" 
+                placeholder="0" 
+              />
+            </div>
+
+            <button 
+              onClick={saveItem} 
+              disabled={results.totalPoints <= 0} 
+              className="w-full py-5 bg-indigo-600 text-white rounded-3xl font-black text-xl shadow-2xl shadow-indigo-200 hover:bg-indigo-700 active:scale-[0.98] disabled:bg-gray-200 disabled:shadow-none transition-all flex items-center justify-center gap-3"
+            >
+              <Save className="w-6 h-6" />
+              保存当前灵饰记录
+            </button>
+          </section>
+        </div>
+
+        {/* Right: Analysis */}
+        <div className="lg:w-1/2">
+           <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden h-full flex flex-col">
+              <div className="relative z-10 flex-1">
+                 <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-10 flex items-center gap-3">
+                   <Activity className="w-5 h-5 text-indigo-500" />
+                   实时价值评估数据
+                 </h2>
+                 
+                 <div className="flex flex-col items-center justify-center py-12 space-y-6 border-b border-gray-50 mb-10 bg-gradient-to-b from-gray-50/50 to-transparent rounded-3xl">
+                    <div className="flex items-baseline gap-3">
+                      <span className="text-9xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-indigo-600 to-purple-900 font-mono leading-none">
+                        {results.totalPoints.toFixed(2)}
+                      </span>
+                      <span className="text-2xl font-black text-indigo-300">PTS</span>
+                    </div>
+                    <div className="text-center space-y-1">
+                      <p className="text-sm font-bold text-gray-800">当前种族综合属性点贡献</p>
+                      <p className="text-[11px] text-gray-400 font-medium">包含宝石加成后的最终等效属性</p>
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 px-4 mb-8">
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between p-4 bg-orange-50/50 rounded-2xl border border-orange-100">
+                        <span className="text-xs font-black text-orange-700 flex items-center gap-2"><Swords className="w-4 h-4"/> 物理潜力</span>
+                        <span className="text-lg font-black font-mono text-orange-600">+{results.eqStr.toFixed(1)}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-4 bg-cyan-50/50 rounded-2xl border border-cyan-100">
+                        <span className="text-xs font-black text-cyan-700 flex items-center gap-2"><Wind className="w-4 h-4"/> 敏捷潜力</span>
+                        <span className="text-lg font-black font-mono text-cyan-600">+{results.eqAgi.toFixed(1)}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+                        <span className="text-xs font-black text-blue-700 flex items-center gap-2"><ShieldCheck className="w-4 h-4"/> 防御潜力</span>
+                        <span className="text-lg font-black font-mono text-blue-600">+{results.eqEnd.toFixed(1)}</span>
+                      </div>
+                    </div>
+                    <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-3xl p-8 flex flex-col justify-center text-center shadow-inner border border-indigo-100/50">
+                       <span className="text-[11px] font-black text-indigo-400 uppercase tracking-widest mb-3">性价比 (单价)</span>
+                       <div className="flex items-baseline justify-center gap-1">
+                         <span className="text-sm font-bold text-indigo-600">¥</span>
+                         <span className="text-5xl font-black font-mono text-indigo-700 leading-none">{results.pricePerPoint.toFixed(2)}</span>
+                       </div>
+                       <span className="text-[10px] text-indigo-300 font-bold mt-3">每点属性人民币价值</span>
+                    </div>
+                 </div>
+
+                 <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
+                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <HelpCircle className="w-3 h-3" /> 计算公式详情 (Formula Details)
+                    </h4>
+                    <div className="space-y-3 font-mono text-[11px]">
+                      <div className="flex justify-between items-center text-gray-600">
+                        <span className="font-bold">力量(Str):</span>
+                        <span>(Σ总伤害 {results.totalDmg}) / {results.factor.strToDmg} = {results.eqStr.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-gray-600">
+                        <span className="font-bold">敏捷(Agi):</span>
+                        <span>(Σ总速度 {results.totalSpd}) / 0.7 = {results.eqAgi.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-gray-600">
+                        <span className="font-bold">耐力(End):</span>
+                        <span>(Σ总防御 {results.totalDef}) / {results.factor.endToDef} = {results.eqEnd.toFixed(2)}</span>
+                      </div>
+                      <div className="pt-2 border-t border-gray-200 mt-2 flex justify-between items-center font-black text-indigo-700">
+                        <span>总分(Total):</span>
+                        <span>{results.eqStr.toFixed(2)} + {results.eqAgi.toFixed(2)} + {results.eqEnd.toFixed(2)} = {results.totalPoints.toFixed(2)}</span>
+                      </div>
+                    </div>
+                 </div>
+              </div>
+           </div>
+        </div>
+      </div>
+
+      {/* History Section Moved to Bottom for Balance */}
+      <section className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4 border-b border-gray-50 pb-6">
+          <div className="flex items-center gap-3">
+             <HistoryIcon className="w-5 h-5 text-indigo-500" />
+             <h3 className="text-lg font-black text-gray-800">历史对比记录</h3>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <div className="flex bg-gray-100 p-1 rounded-2xl">
+              {['ring', 'earring'].map(t => (
+                <button key={t} onClick={() => setHistoryTab(t as SpiritType)} className={`px-6 py-2 rounded-xl text-xs font-black transition-all ${historyTab === t ? 'bg-white shadow-md text-indigo-600' : 'text-gray-500'}`}>
+                  {t === 'ring' ? '戒指库' : '耳饰库'}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setSortOrder(sortOrder === 'time' ? 'points' : 'time')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase transition-all border ${sortOrder === 'points' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-500 hover:border-indigo-400'}`}
+              >
+                <ArrowDownUp className="w-3 h-3" />
+                {sortOrder === 'points' ? '高分优先' : '最新优先'}
+              </button>
+              <button onClick={() => setSavedItems([])} className="p-2.5 bg-red-50 text-red-300 hover:text-red-500 rounded-xl transition-colors" title="清空历史"><Trash2 className="w-5 h-5"/></button>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+           {filteredAndSortedHistory.map(item => (
+             <div 
+                key={item.id} 
+                className="relative group cursor-help animate-in slide-in-from-bottom-4 duration-300"
+                onMouseEnter={() => setHoveredId(item.id)}
+                onMouseLeave={() => setHoveredId(null)}
+              >
+                <div className="flex items-center justify-between p-5 bg-gray-50 rounded-2xl transition-all group-hover:bg-white group-hover:shadow-xl group-hover:ring-2 group-hover:ring-indigo-100">
+                  <div className="flex items-center gap-4">
+                     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-sm font-black shadow-sm ${item.spiritType === 'ring' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>
+                        {item.spiritType === 'ring' ? '戒' : '耳'}
+                     </div>
+                     <div>
+                       <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{item.gemLevel}级星辉 · {RACE_FACTORS[item.race].label}</div>
+                       <div className="text-xl font-black font-mono text-indigo-600 leading-tight">{item.totalPoints.toFixed(1)} <span className="text-[11px] text-gray-300 ml-1">PTS</span></div>
+                     </div>
+                  </div>
+                  <div className="text-right">
+                     <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">性价比单价</div>
+                     <div className="text-base font-black font-mono text-green-600">¥{item.pricePerPoint.toFixed(2)}</div>
+                  </div>
+                </div>
+
+                {/* Tooltip Popup */}
+                {hoveredId === item.id && (
+                  <div className="absolute bottom-full left-0 mb-4 w-80 p-6 bg-white/95 backdrop-blur-2xl border border-indigo-100 rounded-3xl shadow-2xl z-50 animate-in zoom-in-95 fade-in duration-200 pointer-events-none">
+                    <div className="flex justify-between items-center mb-5 border-b border-gray-100 pb-3">
+                      <span className="text-xs font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2"><Eye className="w-3 h-3"/> 原始数据回溯</span>
+                      <span className="text-xs font-mono font-black text-amber-600">¥{item.price.toLocaleString()}</span>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex justify-between text-sm bg-gray-50 p-3 rounded-xl">
+                        <span className="text-gray-500 font-bold">主属性 - {MAIN_ATTR_LABELS[item.mainAttr.type]}</span>
+                        <span className="font-mono font-black text-gray-800">{item.mainAttr.value}</span>
+                      </div>
+                      <div className="space-y-2 px-1">
+                        {item.subAttrs.map((sa, si) => (
+                          <div key={si} className="flex justify-between items-center text-xs">
+                            <span className="text-gray-400 font-medium">附加条目 {si + 1}: {sa.type === 'damage' ? '伤害' : '速度'}</span>
+                            <div className="flex items-center gap-2 font-mono">
+                              <span className="font-bold text-gray-600">{sa.value}</span>
+                              <span className="text-green-500 font-black px-1.5 py-0.5 bg-green-50 rounded">+{item.gemLevel * (sa.type === 'damage' ? 4 : 3)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-between">
+                         <span className="text-[10px] text-gray-300 italic">保存于 {new Date(item.id).toLocaleTimeString()}</span>
+                         <span className="text-[10px] font-bold text-indigo-300">数据仅供参考</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+             </div>
+           ))}
+           {filteredAndSortedHistory.length === 0 && (
+             <div className="col-span-full py-20 text-center border-2 border-dashed border-gray-100 rounded-3xl">
+                <HistoryIcon className="w-10 h-10 text-gray-100 mx-auto mb-4" />
+                <p className="text-sm font-black text-gray-300 uppercase tracking-widest">该类别暂无对比记录</p>
+             </div>
+           )}
+        </div>
+      </section>
+    </div>
+  );
+};
+
+// --- Tool 1: BB Equipment Calculator ---
+
+const SummonedBeastEquipTool = () => {
+  const [growth, setGrowth] = useState<number>(1.297);
+  const [speedQual, setSpeedQual] = useState<number>(1400);
+  const [price, setPrice] = useState<number>(0);
+  const [stats, setStats] = useState({
+    damage: 0, defense: 0, hp: 0, speed: 0,
+    str: 0, end: 0, con: 0, agi: 0
   });
 
   const [savedItems, setSavedItems] = useState<SavedItem[]>([]);
-  
-  // Sorting state
-  const [sortConfig, setSortConfig] = useState<{
-    key: keyof SavedItem | null;
-    direction: 'asc' | 'desc';
-  }>({ key: 'totalPoints', direction: 'desc' }); // Default sort by total points
-
-  // Tab state for comparison
+  const [sortConfig, setSortConfig] = useState<{key: keyof SavedItem | null, direction: 'asc' | 'desc'}>({ key: 'totalPoints', direction: 'desc' });
   const [activeTab, setActiveTab] = useState<ItemType>('armor');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Tooltip state
-  const [hoveredItem, setHoveredItem] = useState<SavedItem | null>(null);
-  const tooltipRef = useRef<HTMLDivElement>(null);
-
-  // Load saved items from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem('summoned_beast_calc_items');
     if (saved) {
       try {
-        const parsed = JSON.parse(saved);
-        // Migration logic for old items
-        const migrated = parsed.map((item: any) => {
-          let newType: ItemType = item.type;
-          
-          // Fix for old generic 'accessory' type or missing type
-          // If it was 'accessory', split it based on stats
-          if (!newType || newType === 'accessory' as any) {
-            if ((item.stats?.defense || 0) > 0) newType = 'armor';
-            else if ((item.stats?.speed || 0) > 0) newType = 'collar';
-            else newType = 'bracer';
-          }
-
-          return {
-            ...item,
-            speedQual: item.speedQual || 1400,
-            stats: {
-              ...item.stats,
-              speed: item.stats.speed || 0,
-              agi: item.stats.agi || 0
-            },
-            type: newType
-          };
-        });
-        setSavedItems(migrated);
-      } catch (e) {
-        console.error('Failed to parse saved items', e);
-      }
+        setSavedItems(JSON.parse(saved));
+      } catch (e) { console.error(e); }
     }
   }, []);
 
-  // Save to localStorage whenever list changes
   useEffect(() => {
     localStorage.setItem('summoned_beast_calc_items', JSON.stringify(savedItems));
   }, [savedItems]);
 
-  // Calculation Logic
-  useEffect(() => {
-    // 1. Strength Conversion
-    // Formula: 1 Strength * Growth = 1.333 Damage (Approx)
-    // Reverse: Equivalent Str = (Damage * 4/3) / Growth
+  const results = useMemo(() => {
     const strFromDmg = growth > 0 ? (stats.damage * (4/3)) / growth : 0;
-
-    // 2. Endurance Conversion
-    // Formula: 1 Endurance * Growth * 1.333 = 1 Defense
-    // Reverse: Equivalent End = Defense / (Growth * 4/3)
     const endFromDef = growth > 0 ? stats.defense / (growth * (4/3)) : 0;
-
-    // 3. Constitution Conversion
-    // Formula: 1 Constitution * Growth * 6 = 1 HP
-    // Reverse: Equivalent Con = HP / (Growth * 6)
     const conFromHp = growth > 0 ? stats.hp / (growth * 6) : 0;
-
-    // 4. Agility Conversion
-    // Formula: Speed = Agility * (Speed_Qual / 1000)
-    // Reverse: Equivalent Agi = Speed / (Speed_Qual / 1000)
     const agiFromSpeed = speedQual > 0 ? stats.speed / (speedQual / 1000) : 0;
-
-    const totalPoints = 
-      (stats.str + strFromDmg) + 
-      (stats.end + endFromDef) + 
-      (stats.con + conFromHp) +
-      (stats.agi + agiFromSpeed);
-
+    const totalPoints = (stats.str + strFromDmg) + (stats.end + endFromDef) + (stats.con + conFromHp) + (stats.agi + agiFromSpeed);
     const pricePerPoint = (price > 0 && totalPoints > 0) ? price / totalPoints : 0;
-
-    setResults({
-      strFromDmg,
-      endFromDef,
-      conFromHp,
-      agiFromSpeed,
-      totalPoints,
-      pricePerPoint
-    });
+    return { strFromDmg, endFromDef, conFromHp, agiFromSpeed, totalPoints, pricePerPoint };
   }, [growth, speedQual, stats, price]);
-
-  // Determine current item sub-type for display
-  const getSubTypeLabel = (s: typeof stats) => {
-    if (s.defense > 0) return { label: '铠甲 (Armor)', icon: <Shirt className="w-3 h-3" />, color: 'blue' };
-    if (s.speed > 0) return { label: '项圈 (Collar)', icon: <Wind className="w-3 h-3" />, color: 'cyan' };
-    return { label: '护腕 (Bracer)', icon: <Watch className="w-3 h-3" />, color: 'orange' };
-  };
-
-  const currentSubType = getSubTypeLabel(stats);
-
-  // Memoized sorted items
-  const sortedItems = useMemo(() => {
-    // Filter by active tab
-    let filteredItems = savedItems.filter(item => item.type === activeTab);
-    
-    if (sortConfig.key !== null) {
-      filteredItems.sort((a, b) => {
-        // @ts-ignore
-        const aValue = a[sortConfig.key];
-        // @ts-ignore
-        const bValue = b[sortConfig.key];
-        
-        if (aValue < bValue) {
-          return sortConfig.direction === 'asc' ? -1 : 1;
-        }
-        if (aValue > bValue) {
-          return sortConfig.direction === 'asc' ? 1 : -1;
-        }
-        return 0;
-      });
-    }
-    return filteredItems;
-  }, [savedItems, sortConfig, activeTab]);
-
-  const requestSort = (key: keyof SavedItem) => {
-    let direction: 'asc' | 'desc' = 'asc';
-    
-    // Smart defaults for first click
-    if (sortConfig.key !== key) {
-        if (key === 'totalPoints') direction = 'desc'; // High points is better
-        if (key === 'price') direction = 'asc'; // Low price is better
-        if (key === 'pricePerPoint') direction = 'asc'; // Low cost per point is better
-        if (key === 'timestamp') direction = 'desc'; // Newest is better
-    } else {
-        // Toggle if clicking same key
-        if (sortConfig.direction === 'asc') {
-            direction = 'desc';
-        } else {
-            direction = 'asc';
-        }
-    }
-    
-    setSortConfig({ key, direction });
-  };
-
-  const handleStatChange = (key: keyof typeof stats, value: string) => {
-    // Allow empty string for clearing input
-    if (value === '') {
-      setStats(prev => ({ ...prev, [key]: 0 }));
-      return;
-    }
-    const num = parseFloat(value);
-    // Prevent negative numbers
-    if (num < 0) return;
-    setStats(prev => ({ ...prev, [key]: isNaN(num) ? 0 : num }));
-  };
-
-  const handlePriceChange = (value: string) => {
-     if (value === '') {
-      setPrice(0);
-      return;
-    }
-    const num = parseFloat(value);
-    if (num < 0) return;
-    setPrice(isNaN(num) ? 0 : num);
-  };
-
-  const resetAll = () => {
-    // Keep growth/speedQual as settings
-    setPrice(0);
-    setStats({
-      damage: 0, defense: 0, hp: 0, speed: 0,
-      str: 0, end: 0, con: 0, agi: 0
-    });
-  };
 
   const saveCurrentItem = () => {
     if (results.totalPoints <= 0) return;
-
-    let type: ItemType = 'bracer';
-    if (stats.defense > 0) type = 'armor';
-    else if (stats.speed > 0) type = 'collar';
-    // else default to bracer
-
+    let type: ItemType = stats.defense > 0 ? 'armor' : stats.speed > 0 ? 'collar' : 'bracer';
     const newItem: SavedItem = {
-      id: Date.now(),
-      timestamp: Date.now(),
-      growth,
-      speedQual,
-      stats: { ...stats },
-      price,
-      totalPoints: results.totalPoints,
-      pricePerPoint: results.pricePerPoint,
-      type
+      id: Date.now(), timestamp: Date.now(), growth, speedQual,
+      stats: { ...stats }, price, totalPoints: results.totalPoints,
+      pricePerPoint: results.pricePerPoint, type
     };
-
     setSavedItems(prev => [newItem, ...prev]);
-    // Switch tab to the type of the item just saved
     setActiveTab(type);
   };
 
-  const deleteSavedItem = (id: number) => {
-    setSavedItems(prev => prev.filter(item => item.id !== id));
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (tooltipRef.current) {
-      const tooltip = tooltipRef.current;
-      const offset = 15; // Distance from cursor
-      
-      let left = e.clientX + offset;
-      let top = e.clientY + offset;
-
-      // Viewport checks to prevent clipping
-      const rect = tooltip.getBoundingClientRect();
-      const winWidth = window.innerWidth;
-      const winHeight = window.innerHeight;
-
-      // If tooltip goes off right edge, move to left of cursor
-      if (left + rect.width > winWidth) {
-        left = e.clientX - rect.width - offset;
-      }
-
-      // If tooltip goes off bottom edge, move above cursor
-      if (top + rect.height > winHeight) {
-        top = e.clientY - rect.height - offset;
-      }
-
-      tooltip.style.left = `${left}px`;
-      tooltip.style.top = `${top}px`;
+  const sortedItems = useMemo(() => {
+    let filtered = savedItems.filter(item => item.type === activeTab);
+    if (sortConfig.key) {
+      filtered.sort((a, b) => {
+        const aVal = a[sortConfig.key!] as number;
+        const bVal = b[sortConfig.key!] as number;
+        return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+      });
     }
-  };
-
-  // Helper to format date
-  const formatDate = (ts: number) => {
-    return new Date(ts).toLocaleString('zh-CN', { 
-      month: 'numeric', 
-      day: 'numeric', 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  };
-
-  // Helper component for Sortable Header
-  const SortHeader = ({ label, sortKey, alignRight = false }: { label: string, sortKey: keyof SavedItem, alignRight?: boolean }) => {
-    const isSorted = sortConfig.key === sortKey;
-    return (
-      <th 
-        className={`px-6 py-3 font-medium cursor-pointer hover:bg-gray-100 transition-colors select-none group ${alignRight ? 'text-right' : 'text-left'}`}
-        onClick={() => requestSort(sortKey)}
-      >
-        <div className={`flex items-center gap-1 ${alignRight ? 'justify-end' : 'justify-start'}`}>
-          {label}
-          <div className="flex flex-col text-gray-400">
-            {isSorted ? (
-               sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600" /> : <ArrowDown className="w-3 h-3 text-indigo-600" />
-            ) : (
-               <ArrowDownUp className="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
-            )}
-          </div>
-        </div>
-      </th>
-    );
-  };
-
-  // Get tab styles
-  const getTabStyle = (tab: ItemType) => {
-    const isActive = activeTab === tab;
-    return `flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-      isActive 
-        ? 'bg-white text-indigo-600 shadow-sm' 
-        : 'text-gray-500 hover:text-gray-700'
-    }`;
-  };
-
-  // Get Empty State Description
-  const getEmptyStateDesc = () => {
-      switch(activeTab) {
-          case 'armor': return '暂无铠甲记录 (防御 > 0)';
-          case 'collar': return '暂无项圈记录 (速度 > 0, 防御 = 0)';
-          case 'bracer': return '暂无护腕记录 (防御 = 0, 速度 = 0)';
-          default: return '暂无记录';
-      }
-  };
+    return filtered;
+  }, [savedItems, sortConfig, activeTab]);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
-        
-        {/* Header */}
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="bg-indigo-600 p-2.5 rounded-xl text-white shadow-lg shadow-indigo-200">
-              <Activity className="w-7 h-7" />
+    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Input Panel */}
+        <div className="lg:w-5/12 space-y-6">
+           <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2"><Settings className="w-4 h-4 text-indigo-500"/>核心设置</h3>
+                <div className="flex gap-2">
+                   <button onClick={() => fileInputRef.current?.click()} className="p-1.5 text-gray-400 hover:text-indigo-600 transition-colors" title="导入"><Upload className="w-4 h-4"/></button>
+                   <button onClick={() => {
+                     const data = JSON.stringify(savedItems);
+                     const blob = new Blob([data], {type: 'application/json'});
+                     const url = URL.createObjectURL(blob);
+                     const a = document.createElement('a');
+                     a.href = url; a.download = 'backup.json'; a.click();
+                   }} className="p-1.5 text-gray-400 hover:text-indigo-600 transition-colors" title="导出"><Download className="w-4 h-4"/></button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const r = new FileReader();
+                  r.onload = (ev) => setSavedItems(JSON.parse(ev.target?.result as string));
+                  r.readAsText(file);
+                }} />
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">召唤兽成长</label>
+                  <input type="number" step="0.001" value={growth} onChange={e => setGrowth(parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 bg-gray-50 border rounded-lg font-mono outline-none focus:border-indigo-500"/>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">速度资质</label>
+                  <input type="number" value={speedQual} onChange={e => setSpeedQual(parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 bg-gray-50 border rounded-lg font-mono outline-none focus:border-indigo-500"/>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">价格 (RMB)</label>
+                <input type="number" value={price === 0 ? '' : price} onChange={e => setPrice(parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 bg-gray-50 border rounded-lg font-mono outline-none focus:border-indigo-500" placeholder="0"/>
+              </div>
+           </section>
+
+           <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6">
+              <div>
+                <h3 className="font-bold text-gray-800 text-sm mb-4 flex items-center gap-2"><div className="w-1.5 h-4 bg-yellow-400 rounded-full"/>基础属性 (黄)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                   <StatInput label="伤害" value={stats.damage} onChange={(v:any) => setStats({...stats, damage: parseFloat(v)||0})} colorClass="bg-yellow-50/30 border-yellow-100" />
+                   <StatInput label="防御" value={stats.defense} onChange={(v:any) => setStats({...stats, defense: parseFloat(v)||0})} colorClass="bg-yellow-50/30 border-yellow-100" />
+                   <StatInput label="气血" value={stats.hp} onChange={(v:any) => setStats({...stats, hp: parseFloat(v)||0})} colorClass="bg-yellow-50/30 border-yellow-100" />
+                   <StatInput label="速度" value={stats.speed} onChange={(v:any) => setStats({...stats, speed: parseFloat(v)||0})} colorClass="bg-yellow-50/30 border-yellow-100" />
+                </div>
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-800 text-sm mb-4 flex items-center gap-2"><div className="w-1.5 h-4 bg-green-400 rounded-full"/>附加属性 (绿)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                   <StatInput label="力量" value={stats.str} onChange={(v:any) => setStats({...stats, str: parseFloat(v)||0})} colorClass="bg-green-50/30 border-green-100" />
+                   <StatInput label="耐力" value={stats.end} onChange={(v:any) => setStats({...stats, end: parseFloat(v)||0})} colorClass="bg-green-50/30 border-green-100" />
+                   <StatInput label="体质" value={stats.con} onChange={(v:any) => setStats({...stats, con: parseFloat(v)||0})} colorClass="bg-green-50/30 border-green-100" />
+                   <StatInput label="敏捷" value={stats.agi} onChange={(v:any) => setStats({...stats, agi: parseFloat(v)||0})} colorClass="bg-green-50/30 border-green-100" />
+                </div>
+              </div>
+              <button onClick={saveCurrentItem} disabled={results.totalPoints <= 0} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 disabled:bg-gray-200 disabled:shadow-none transition-all flex items-center justify-center gap-2">
+                <Save className="w-4 h-4"/>保存记录
+              </button>
+           </section>
+        </div>
+
+        {/* Results Panel */}
+        <div className="lg:w-7/12">
+           <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-8 rounded-3xl text-white shadow-xl relative overflow-hidden h-full flex flex-col justify-between">
+              <div className="relative z-10">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="text-indigo-100 text-sm mb-1 uppercase tracking-widest font-bold">综合属性值</h4>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-7xl font-black font-mono tracking-tighter">{results.totalPoints.toFixed(2)}</span>
+                      <span className="text-xl opacity-70">点</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-indigo-200 mb-1 uppercase tracking-widest">单点价值</p>
+                    <p className="text-3xl font-bold font-mono">¥{results.pricePerPoint.toFixed(2)}</p>
+                  </div>
+                </div>
+                <div className="mt-12 grid grid-cols-2 sm:grid-cols-4 gap-6 pt-8 border-t border-white/10">
+                   {[
+                     { label: '物理贡献', val: (stats.str + results.strFromDmg).toFixed(1), color: 'text-orange-300' },
+                     { label: '耐力贡献', val: (stats.end + results.endFromDef).toFixed(1), color: 'text-blue-300' },
+                     { label: '气血贡献', val: (stats.con + results.conFromHp).toFixed(1), color: 'text-rose-300' },
+                     { label: '敏捷贡献', val: (stats.agi + results.agiFromSpeed).toFixed(1), color: 'text-cyan-300' }
+                   ].map((t) => (
+                     <div key={t.label}>
+                       <p className="text-[10px] text-white/50 uppercase mb-1 tracking-widest">{t.label}</p>
+                       <p className={`text-2xl font-black font-mono ${t.color}`}>{t.val}</p>
+                     </div>
+                   ))}
+                </div>
+              </div>
+              
+              <div className="relative z-10 mt-12 bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/10">
+                 <p className="text-[10px] text-white/40 uppercase mb-2 font-black tracking-widest">反推公式说明</p>
+                 <div className="text-[11px] font-mono text-white/70 space-y-1">
+                   <p>伤害 → 力量: (伤害 * 4/3) / 成长</p>
+                   <p>防御 → 耐力: 防御 / (成长 * 4/3)</p>
+                   <p>气血 → 体质: 气血 / (成长 * 6)</p>
+                   <p>速度 → 敏捷: 速度 / (资历 / 1000)</p>
+                 </div>
+              </div>
+
+              <Activity className="absolute bottom-[-20px] right-[-20px] w-64 h-64 opacity-5 pointer-events-none rotate-12" />
+           </div>
+        </div>
+      </div>
+
+      {/* History Panel for BB Tool */}
+      <section className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm min-h-[400px]">
+          <div className="p-6 bg-gray-50 border-b flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+               <HistoryIcon className="w-5 h-5 text-indigo-500" />
+               <h3 className="font-black text-gray-800">装备对比记录</h3>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">召唤兽装备综合价值计算器</h1>
-              <p className="text-sm text-gray-500">Summoned Beast Equipment Calculator</p>
+            <div className="flex items-center gap-4">
+              <div className="flex bg-gray-200/50 p-1.5 rounded-xl">
+                {[
+                  {id: 'armor', icon: <Shirt className="w-4 h-4"/>, label: '铠甲'},
+                  {id: 'collar', icon: <Wind className="w-4 h-4"/>, label: '项圈'},
+                  {id: 'bracer', icon: <Watch className="w-4 h-4"/>, label: '护腕'}
+                ].map(t => (
+                  <button key={t.id} onClick={() => setActiveTab(t.id as any)} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-black transition-all ${activeTab === t.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                    {t.icon}{t.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-[10px] text-gray-400 font-mono font-black uppercase">Count: {sortedItems.length}</span>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button 
-              onClick={saveCurrentItem}
-              disabled={results.totalPoints <= 0}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors shadow-sm ${results.totalPoints > 0 ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-300 cursor-not-allowed'}`}
-            >
-              <Save className="w-4 h-4" />
-              保存记录
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-white text-gray-400 uppercase border-b">
+                <tr>
+                  <th className="px-6 py-4 font-black tracking-widest">成长</th>
+                  <th className="px-6 py-4 font-black tracking-widest cursor-pointer hover:text-indigo-600" onClick={() => setSortConfig({key: 'totalPoints', direction: sortConfig.direction === 'desc' ? 'asc' : 'desc'})}>综合属性点</th>
+                  <th className="px-6 py-4 font-black tracking-widest cursor-pointer hover:text-indigo-600" onClick={() => setSortConfig({key: 'price', direction: sortConfig.direction === 'asc' ? 'desc' : 'asc'})}>价格 (RMB)</th>
+                  <th className="px-6 py-4 font-black tracking-widest">单价 / PTS</th>
+                  <th className="px-6 py-4 text-right font-black tracking-widest">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {sortedItems.map(item => (
+                  <tr key={item.id} className="hover:bg-indigo-50/30 transition-colors group">
+                    <td className="px-6 py-4 font-mono font-bold">{item.growth.toFixed(3)}</td>
+                    <td className="px-6 py-4 font-black text-indigo-600 text-sm font-mono">{item.totalPoints.toFixed(2)}</td>
+                    <td className="px-6 py-4 font-mono text-gray-600">¥{item.price.toLocaleString()}</td>
+                    <td className="px-6 py-4 font-black text-green-600 font-mono text-sm">¥{item.pricePerPoint.toFixed(2)}</td>
+                    <td className="px-6 py-4 text-right">
+                       <button onClick={() => setSavedItems(prev => prev.filter(p => p.id !== item.id))} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 className="w-4 h-4"/></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {sortedItems.length === 0 && <div className="py-32 text-center text-gray-200 font-black uppercase tracking-widest">暂无对比记录</div>}
+          </div>
+      </section>
+    </div>
+  );
+};
+
+// --- Dashboard Component ---
+
+const Dashboard = ({ onSelectTool }: { onSelectTool: (id: string) => void }) => {
+  const tools = [
+    { 
+      id: 'beast-equip', 
+      name: 'BB装价值计算器', 
+      desc: '精准计算装备综合属性，根据属性公式反推价值，支持多分类记录对比。', 
+      icon: <Activity className="w-8 h-8 text-indigo-500" />,
+      color: 'bg-indigo-50',
+      active: true
+    },
+    { 
+      id: 'spirit-calc', 
+      name: '物理系灵饰计算器', 
+      desc: '支持星辉石属性加成计算，根据不同种族转换属性点收益。', 
+      icon: <Gem className="w-8 h-8 text-purple-500" />,
+      color: 'bg-purple-50',
+      active: true
+    },
+    { 
+      id: 'summon-sim', 
+      name: '炼妖概率模拟器', 
+      desc: '模拟炼妖合宠，计算翻页宠、神宠产出概率。', 
+      icon: <Sparkles className="w-8 h-8 text-amber-500" />,
+      color: 'bg-amber-50',
+      active: false
+    },
+    { 
+      id: 'attr-sim', 
+      name: '属性点模拟器', 
+      desc: '全等级段召唤兽属性点模拟，计算潜能果、加点收益。', 
+      icon: <LayoutDashboard className="w-8 h-8 text-emerald-500" />,
+      color: 'bg-emerald-50',
+      active: false
+    },
+    { 
+      id: 'market-trend', 
+      name: '藏宝阁价格趋势', 
+      desc: '分析跨服物价走势，定位装备合理价格区间。', 
+      icon: <Coins className="w-8 h-8 text-rose-500" />,
+      color: 'bg-rose-50',
+      active: false
+    }
+  ];
+
+  return (
+    <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-700">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {tools.map(tool => (
+          <div 
+            key={tool.id}
+            onClick={() => tool.active && onSelectTool(tool.id)}
+            className={`p-6 rounded-3xl border transition-all relative overflow-hidden group ${
+              tool.active 
+                ? 'bg-white border-gray-100 hover:shadow-xl hover:-translate-y-1 cursor-pointer' 
+                : 'bg-gray-50 border-transparent opacity-60 grayscale cursor-not-allowed'
+            }`}
+          >
+            <div className={`p-4 rounded-2xl w-fit mb-4 transition-transform group-hover:scale-110 ${tool.color}`}>
+              {tool.icon}
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">{tool.name}</h3>
+            <p className="text-sm text-gray-500 leading-relaxed mb-4">{tool.desc}</p>
+            <div className="flex items-center text-xs font-bold text-indigo-600">
+              {tool.active ? '立即进入' : '敬请期待'}
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </div>
+            {!tool.active && (
+              <div className="absolute top-4 right-4 bg-gray-200 text-gray-500 px-2 py-0.5 rounded text-[10px] font-bold">SOON</div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-indigo-900 rounded-3xl p-8 text-white flex flex-col md:flex-row items-center gap-8 shadow-2xl shadow-indigo-200">
+         <div className="flex-1 space-y-4 text-center md:text-left">
+            <h2 className="text-3xl font-black">欢迎使用梦幻高级工具箱</h2>
+            <p className="text-indigo-200 text-sm leading-relaxed max-w-xl">
+              我们致力于为梦幻西游玩家提供最专业的数据支持与价值评估工具。在这里，每一个数据都有据可查，每一次决策都有理可依。
+            </p>
+            <div className="flex flex-wrap gap-4 justify-center md:justify-start">
+               <div className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full text-xs font-medium backdrop-blur-sm border border-white/10"><BookOpen className="w-4 h-4"/> 查阅公式库</div>
+               <div className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full text-xs font-medium backdrop-blur-sm border border-white/10"><ExternalLink className="w-4 h-4"/> 访问藏宝阁</div>
+            </div>
+         </div>
+         <div className="w-48 h-48 bg-white/5 rounded-full flex items-center justify-center border border-white/10 relative">
+            <Activity className="w-24 h-24 text-indigo-300 animate-pulse" />
+            <div className="absolute inset-0 border-2 border-indigo-400/20 rounded-full animate-ping" />
+         </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Main App Wrapper ---
+
+const App = () => {
+  const [currentTool, setCurrentTool] = useState<string>('home');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // Toggle sidebar for smaller screens
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024) setIsSidebarOpen(false);
+      else setIsSidebarOpen(true);
+    };
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const menuItems = [
+    { id: 'home', icon: <Home className="w-5 h-5"/>, label: '概览主页' },
+    { id: 'beast-equip', icon: <Activity className="w-5 h-5"/>, label: 'BB装价值计算' },
+    { id: 'spirit-calc', icon: <Gem className="w-5 h-5"/>, label: '灵饰价值计算' },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex overflow-hidden">
+      
+      {/* Sidebar */}
+      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-100 transition-transform duration-300 ease-in-out transform lg:relative ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:hidden'}`}>
+        <div className="h-full flex flex-col">
+          <div className="p-6 flex items-center gap-3 border-b border-gray-50">
+            <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg"><Activity className="w-6 h-6"/></div>
+            <h1 className="font-black text-xl text-gray-800 tracking-tight">梦幻高级工具箱</h1>
+          </div>
+          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-2">主菜单 / Tools</div>
+            {menuItems.map(item => (
+              <button
+                key={item.id}
+                onClick={() => setCurrentTool(item.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm group ${
+                  currentTool === item.id 
+                    ? 'bg-indigo-50 text-indigo-600 shadow-sm' 
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <span className={`transition-colors ${currentTool === item.id ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-600'}`}>
+                  {item.icon}
+                </span>
+                {item.label}
+                {currentTool === item.id && <div className="ml-auto w-1.5 h-1.5 bg-indigo-600 rounded-full" />}
+              </button>
+            ))}
+          </nav>
+          <div className="p-4 border-t border-gray-50">
+            <div className="bg-gray-50 rounded-2xl p-4">
+              <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">当前版本</p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-600">v1.4.1-Alpha</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  <span className="text-[10px] text-gray-500">Online</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col min-w-0 bg-gray-50">
+        
+        {/* Top Header */}
+        <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 lg:px-8 sticky top-0 z-30">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-gray-500 hover:bg-gray-50 rounded-lg lg:hidden">
+              {isSidebarOpen ? <X className="w-6 h-6"/> : <Menu className="w-6 h-6"/>}
             </button>
-            <button 
-              onClick={resetAll}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              <RotateCcw className="w-4 h-4" />
-              重置
-            </button>
+            <div className="flex items-center text-sm font-medium text-gray-500">
+               <span className="hover:text-gray-900 cursor-pointer" onClick={() => setCurrentTool('home')}>主页</span>
+               {currentTool !== 'home' && (
+                 <>
+                   <ChevronRight className="w-4 h-4 mx-2 text-gray-300" />
+                   <span className="text-gray-900">{menuItems.find(m => m.id === currentTool)?.label}</span>
+                 </>
+               )}
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="hidden md:flex flex-col text-right">
+              <span className="text-[10px] font-bold text-gray-400 leading-none">SERVER</span>
+              <span className="text-xs font-bold text-gray-600">长安城 / 华南区</span>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-600 font-bold text-xs">
+              M
+            </div>
           </div>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          
-          {/* Left Column: Inputs */}
-          <div className="lg:col-span-5 space-y-6">
-            
-            {/* Global Settings & Price */}
-            <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Settings className="w-4 h-4 text-gray-400" />
-                    <label className="text-sm font-medium text-gray-700">
-                      召唤兽成长
-                    </label>
-                  </div>
-                  <input
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    value={growth}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      if (val < 0) return;
-                      setGrowth(isNaN(val) ? 0 : val);
-                    }}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
-                  />
-                </div>
-                <div className="col-span-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wind className="w-4 h-4 text-gray-400" />
-                    <label className="text-sm font-medium text-gray-700">
-                      速度资质 (Speed Q)
-                    </label>
-                  </div>
-                  <input
-                    type="number"
-                    min="100"
-                    value={speedQual}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      if (val < 0) return;
-                      setSpeedQual(isNaN(val) ? 0 : val);
-                    }}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
-                  />
-                </div>
-              </div>
-              
-              <div>
-                 <div className="flex items-center gap-2 mb-2">
-                  <Coins className="w-4 h-4 text-gray-400" />
-                  <label className="text-sm font-medium text-gray-700">
-                    装备价格 (RMB)
-                  </label>
-                </div>
-                <input
-                  type="number"
-                  min="0"
-                  value={price === 0 ? '' : price}
-                  placeholder="0"
-                  onChange={(e) => handlePriceChange(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none font-mono"
-                />
-              </div>
-            </section>
-
-            {/* Equipment Inputs */}
-            <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-8 relative">
-              {/* Auto-detected Type Badge */}
-               <div className="absolute top-6 right-6 pointer-events-none">
-                <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border shadow-sm transition-all 
-                  ${currentSubType.color === 'blue' ? 'bg-blue-50 text-blue-700 border-blue-200' : 
-                    currentSubType.color === 'cyan' ? 'bg-cyan-50 text-cyan-700 border-cyan-200' : 
-                    'bg-orange-50 text-orange-700 border-orange-200'
-                  }`}>
-                  {currentSubType.icon}
-                  {currentSubType.label}
-                </div>
-              </div>
-
-              {/* Base Stats (Yellow in Game) */}
-              <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-2 h-6 bg-yellow-500 rounded-full"></div>
-                  <h3 className="font-bold text-gray-800 text-lg">基础属性 (黄字)</h3>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <StatInput 
-                    label="伤害 (Damage)" 
-                    value={stats.damage}
-                    onChange={(val) => handleStatChange('damage', val)}
-                    colorClass="bg-yellow-50/50 border-yellow-100 focus:border-yellow-400 focus:ring-yellow-200 text-yellow-800"
-                    placeholder="0"
-                  />
-                  <StatInput 
-                    label="防御 (Defense)" 
-                    value={stats.defense}
-                    onChange={(val) => handleStatChange('defense', val)}
-                    colorClass="bg-yellow-50/50 border-yellow-100 focus:border-yellow-400 focus:ring-yellow-200 text-yellow-800"
-                    placeholder="0"
-                  />
-                  <StatInput 
-                    label="气血 (HP)" 
-                    value={stats.hp}
-                    onChange={(val) => handleStatChange('hp', val)}
-                    colorClass="bg-yellow-50/50 border-yellow-100 focus:border-yellow-400 focus:ring-yellow-200 text-yellow-800"
-                    placeholder="0"
-                  />
-                  <StatInput 
-                    label="速度 (Speed)" 
-                    value={stats.speed}
-                    onChange={(val) => handleStatChange('speed', val)}
-                    colorClass="bg-yellow-50/50 border-yellow-100 focus:border-yellow-400 focus:ring-yellow-200 text-yellow-800"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-
-              {/* Additional Stats (Green in Game) */}
-              <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-2 h-6 bg-green-500 rounded-full"></div>
-                  <h3 className="font-bold text-gray-800 text-lg">附加属性 (绿字)</h3>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <StatInput 
-                    label="力量" 
-                    value={stats.str}
-                    onChange={(val) => handleStatChange('str', val)}
-                    colorClass="bg-green-50/50 border-green-100 focus:border-green-400 focus:ring-green-200 text-green-800"
-                    placeholder="0"
-                  />
-                  <StatInput 
-                    label="耐力" 
-                    value={stats.end}
-                    onChange={(val) => handleStatChange('end', val)}
-                    colorClass="bg-green-50/50 border-green-100 focus:border-green-400 focus:ring-green-200 text-green-800"
-                    placeholder="0"
-                  />
-                  <StatInput 
-                    label="体质" 
-                    value={stats.con}
-                    onChange={(val) => handleStatChange('con', val)}
-                    colorClass="bg-green-50/50 border-green-100 focus:border-green-400 focus:ring-green-200 text-green-800"
-                    placeholder="0"
-                  />
-                   <StatInput 
-                    label="敏捷" 
-                    value={stats.agi}
-                    onChange={(val) => handleStatChange('agi', val)}
-                    colorClass="bg-green-50/50 border-green-100 focus:border-green-400 focus:ring-green-200 text-green-800"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-
-            </section>
-
-          </div>
-
-          {/* Right Column: Analysis */}
-          <div className="lg:col-span-7 space-y-6">
-            
-            {/* Main Result Card */}
-            <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
-              {/* Background Decoration */}
-              <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-              
-              <div className="flex items-start justify-between relative z-10">
-                <div>
-                  <h2 className="text-indigo-100 font-medium text-lg mb-1">综合属性总值</h2>
-                  <p className="text-indigo-200 text-sm opacity-80">Total Attribute Points</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-indigo-200 text-sm mb-1">性价比 (单点价格)</div>
-                  <div className={`font-mono font-bold text-2xl ${results.pricePerPoint > 0 ? 'text-green-300' : 'text-white/50'}`}>
-                    {results.pricePerPoint > 0 ? `¥${results.pricePerPoint.toFixed(2)}` : '--'}
-                    <span className="text-sm font-normal text-indigo-200 ml-1">/点</span>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="mt-8 flex items-baseline gap-3 relative z-10">
-                <span className="text-7xl font-bold tracking-tight">
-                  {results.totalPoints.toFixed(2)}
-                </span>
-                <span className="text-2xl text-indigo-200 font-medium">点</span>
-              </div>
-              
-              <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 border-t border-white/10 pt-6 relative z-10">
-                <div>
-                  <div className="text-indigo-200 text-xs uppercase tracking-wider mb-1">物理系贡献</div>
-                  <div className="text-2xl font-bold">{(stats.str + results.strFromDmg).toFixed(1)}</div>
-                </div>
-                <div>
-                  <div className="text-indigo-200 text-xs uppercase tracking-wider mb-1">防御系贡献</div>
-                  <div className="text-2xl font-bold">{(stats.end + results.endFromDef).toFixed(1)}</div>
-                </div>
-                <div>
-                  <div className="text-indigo-200 text-xs uppercase tracking-wider mb-1">气血系贡献</div>
-                  <div className="text-2xl font-bold">{(stats.con + results.conFromHp).toFixed(1)}</div>
-                </div>
-                <div>
-                  <div className="text-indigo-200 text-xs uppercase tracking-wider mb-1">敏捷系贡献</div>
-                  <div className="text-2xl font-bold">{(stats.agi + results.agiFromSpeed).toFixed(1)}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Formula Breakdown */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-                 <div className="flex items-center justify-between cursor-pointer group">
-                  <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm">
-                    <Calculator className="w-4 h-4 text-gray-500" />
-                    当前计算详情
-                  </h3>
-                 </div>
-              </div>
-              
-              <div className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-gray-100">
-                
-                {/* Str Breakdown */}
-                <div className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                    <span className="font-bold text-gray-700 text-sm">力量</span>
-                    <span className="ml-auto font-mono font-bold text-gray-800">
-                      {(stats.str + results.strFromDmg).toFixed(1)}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    基{stats.str} + 换{(results.strFromDmg).toFixed(1)}
-                  </div>
-                </div>
-
-                {/* End Breakdown */}
-                <div className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
-                    <span className="font-bold text-gray-700 text-sm">耐力</span>
-                    <span className="ml-auto font-mono font-bold text-gray-800">
-                      {(stats.end + results.endFromDef).toFixed(1)}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    基{stats.end} + 换{(results.endFromDef).toFixed(1)}
-                  </div>
-                </div>
-
-                {/* Con Breakdown */}
-                <div className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                    <span className="font-bold text-gray-700 text-sm">体质</span>
-                    <span className="ml-auto font-mono font-bold text-gray-800">
-                      {(stats.con + results.conFromHp).toFixed(1)}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    基{stats.con} + 换{(results.conFromHp).toFixed(1)}
-                  </div>
-                </div>
-
-                 {/* Agi Breakdown */}
-                <div className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
-                    <span className="font-bold text-gray-700 text-sm">敏捷</span>
-                    <span className="ml-auto font-mono font-bold text-gray-800">
-                      {(stats.agi + results.agiFromSpeed).toFixed(1)}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    基{stats.agi} + 换{(results.agiFromSpeed).toFixed(1)}
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            {/* Comparison Table */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-[400px]">
-               {/* Table Header with Tabs */}
-               <div className="border-b border-gray-100 bg-gray-50/50">
-                <div className="flex items-center justify-between p-4 pb-0">
-                  <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4">
-                    <ArrowDownUp className="w-5 h-5 text-gray-500" />
-                    性价比对比
-                  </h3>
-                  
-                  {/* Category Tabs */}
-                  <div className="flex bg-gray-200/50 p-1 rounded-lg">
-                    <button
-                      onClick={() => setActiveTab('armor')}
-                      className={getTabStyle('armor')}
-                    >
-                      <Shirt className="w-4 h-4" />
-                      铠甲
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('collar')}
-                      className={getTabStyle('collar')}
-                    >
-                      <Wind className="w-4 h-4" />
-                      项圈
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('bracer')}
-                      className={getTabStyle('bracer')}
-                    >
-                      <Watch className="w-4 h-4" />
-                      护腕
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="px-6 py-2 text-xs text-gray-400 bg-gray-50/30">
-                  {activeTab === 'armor' ? '显示防御属性 > 0 的铠甲' : 
-                   activeTab === 'collar' ? '显示速度属性 > 0 的项圈' :
-                   '显示无防御且无速度属性的护腕'}
-                </div>
-              </div>
-
-              {sortedItems.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b">
-                      <tr>
-                        <th className="px-6 py-3 font-medium">成长</th>
-                        <SortHeader label="总属性" sortKey="totalPoints" />
-                        <SortHeader label="价格" sortKey="price" />
-                        <SortHeader label="单价/点" sortKey="pricePerPoint" />
-                        <SortHeader label="时间" sortKey="timestamp" />
-                        <th className="px-6 py-3 font-medium text-right">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {sortedItems.map((item) => (
-                        <tr 
-                          key={item.id} 
-                          className="hover:bg-gray-50 transition-colors cursor-help group"
-                          onMouseEnter={() => setHoveredItem(item)}
-                          onMouseLeave={() => setHoveredItem(null)}
-                          onMouseMove={handleMouseMove}
-                        >
-                          <td className="px-6 py-4 font-mono">{item.growth}</td>
-                          <td className="px-6 py-4 font-bold text-indigo-700">{item.totalPoints.toFixed(2)}</td>
-                          <td className="px-6 py-4 font-mono">¥{item.price}</td>
-                          <td className="px-6 py-4">
-                            {item.pricePerPoint > 0 ? (
-                              <span className="bg-green-100 text-green-800 px-2 py-1 rounded-md font-bold font-mono text-xs">
-                                ¥{item.pricePerPoint.toFixed(2)}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">--</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-gray-500 text-xs whitespace-nowrap">
-                            {formatDate(item.timestamp)}
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deleteSavedItem(item.id);
-                              }}
-                              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                              title="删除"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-4 lg:p-8">
+           <div className="max-w-7xl mx-auto">
+              {currentTool === 'home' ? (
+                <Dashboard onSelectTool={setCurrentTool} />
+              ) : currentTool === 'spirit-calc' ? (
+                <SpiritAccessoryTool />
               ) : (
-                <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                  <div className="bg-gray-100 p-4 rounded-full mb-3">
-                    {activeTab === 'armor' && <Shirt className="w-6 h-6" />}
-                    {activeTab === 'collar' && <Wind className="w-6 h-6" />}
-                    {activeTab === 'bracer' && <Watch className="w-6 h-6" />}
-                  </div>
-                  <p>{getEmptyStateDesc()}</p>
-                </div>
+                <SummonedBeastEquipTool />
               )}
-            </div>
-
-          </div>
-
+           </div>
         </div>
-      </div>
-      
-      {/* Tooltip Portal / Fixed Overlay */}
-      {hoveredItem && (
-        <div 
-          ref={tooltipRef}
-          className="fixed z-50 pointer-events-none transition-opacity duration-200"
-          style={{ 
-            left: 0, 
-            top: 0,
-            filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.1))'
-          }}
-        >
-          <div className="bg-white/95 backdrop-blur-md rounded-xl border border-gray-100 p-4 w-64 text-sm shadow-xl ring-1 ring-black/5">
-            <div className="flex items-center justify-between mb-3 border-b border-gray-100 pb-2">
-              <span className={`text-xs font-bold uppercase tracking-wider ${
-                hoveredItem.type === 'armor' ? 'text-blue-600' : 
-                hoveredItem.type === 'collar' ? 'text-cyan-600' : 'text-orange-600'
-              }`}>
-                {hoveredItem.type === 'armor' ? '铠甲' : 
-                 hoveredItem.type === 'collar' ? '项圈' : '护腕'}
-              </span>
-              <div className="text-right">
-                <div className="text-xs text-gray-400 font-mono">成长: {hoveredItem.growth}</div>
-                <div className="text-[10px] text-gray-300 font-mono">速资: {hoveredItem.speedQual || 1400}</div>
-              </div>
-            </div>
-            
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <div className="text-xs text-gray-400 mb-1">基础属性 (黄字)</div>
-                <div className="grid grid-cols-4 gap-1 text-center">
-                  <div className="bg-yellow-50 rounded p-1">
-                    <div className="text-[9px] text-yellow-600/70">伤害</div>
-                    <div className="font-mono font-bold text-yellow-700 text-xs">{hoveredItem.stats.damage || '-'}</div>
-                  </div>
-                  <div className="bg-yellow-50 rounded p-1">
-                    <div className="text-[9px] text-yellow-600/70">防御</div>
-                    <div className="font-mono font-bold text-yellow-700 text-xs">{hoveredItem.stats.defense || '-'}</div>
-                  </div>
-                  <div className="bg-yellow-50 rounded p-1">
-                    <div className="text-[9px] text-yellow-600/70">气血</div>
-                    <div className="font-mono font-bold text-yellow-700 text-xs">{hoveredItem.stats.hp || '-'}</div>
-                  </div>
-                   <div className="bg-yellow-50 rounded p-1">
-                    <div className="text-[9px] text-yellow-600/70">速度</div>
-                    <div className="font-mono font-bold text-yellow-700 text-xs">{hoveredItem.stats.speed || '-'}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <div className="text-xs text-gray-400 mb-1">附加属性 (绿字)</div>
-                <div className="grid grid-cols-4 gap-1 text-center">
-                  <div className="bg-green-50 rounded p-1">
-                    <div className="text-[9px] text-green-600/70">力量</div>
-                    <div className="font-mono font-bold text-green-700 text-xs">{hoveredItem.stats.str || '-'}</div>
-                  </div>
-                  <div className="bg-green-50 rounded p-1">
-                    <div className="text-[9px] text-green-600/70">耐力</div>
-                    <div className="font-mono font-bold text-green-700 text-xs">{hoveredItem.stats.end || '-'}</div>
-                  </div>
-                  <div className="bg-green-50 rounded p-1">
-                    <div className="text-[9px] text-green-600/70">体质</div>
-                    <div className="font-mono font-bold text-green-700 text-xs">{hoveredItem.stats.con || '-'}</div>
-                  </div>
-                  <div className="bg-green-50 rounded p-1">
-                    <div className="text-[9px] text-green-600/70">敏捷</div>
-                    <div className="font-mono font-bold text-green-700 text-xs">{hoveredItem.stats.agi || '-'}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+        
+        {/* Footer */}
+        <footer className="py-4 px-8 border-t border-gray-100 text-center text-gray-400 text-[10px] font-medium tracking-widest uppercase">
+           &copy; 2024 梦幻高级工具箱 - 玩家数据研究中心
+        </footer>
+      </main>
     </div>
   );
 };
