@@ -14,7 +14,7 @@ type ItemType = 'armor' | 'collar' | 'bracer';
 type RaceType = 'human' | 'demon' | 'immortal';
 type SpiritType = 'ring' | 'earring';
 type SubAttrType = 'damage' | 'speed';
-type GemMode = 'normal' | 'starshine' | 'soul';
+type GemMode = 'normal' | 'starshine' | 'soul' | 'colored';
 
 // --- Constants ---
 
@@ -93,12 +93,14 @@ const GemPriceTool = () => {
 
   const handleModeChange = (newMode: GemMode) => {
     setMode(newMode);
-    if (newMode === 'starshine' && maxLevel > 12) setMaxLevel(12);
-    else if (newMode === 'soul' && maxLevel > 10) setMaxLevel(10);
-    else if (newMode === 'normal' && maxLevel < 15) setMaxLevel(15);
+    if (newMode === 'starshine') setMaxLevel(12);
+    else if (newMode === 'soul') setMaxLevel(10);
+    else if (newMode === 'colored') setMaxLevel(15);
+    else setMaxLevel(15);
 
     if (newMode === 'starshine' && seedLevel > 12) setSeedLevel(1);
     if (newMode === 'soul' && seedLevel > 10) setSeedLevel(1);
+    if (newMode === 'colored' && seedLevel > 15) setSeedLevel(1);
     
     setEditingCell(null);
   };
@@ -108,33 +110,49 @@ const GemPriceTool = () => {
       1: { count: 1, stamina: 0 }
     };
     
-    const extrasConfig = mode === 'normal' ? NORMAL_EXTRAS : (mode === 'starshine' ? STARSHINE_EXTRAS : SOUL_EXTRAS);
+    const extrasConfig = mode === 'normal' ? NORMAL_EXTRAS : (mode === 'starshine' ? STARSHINE_EXTRAS : (mode === 'soul' ? SOUL_EXTRAS : {}));
     const synthesisRule = mode === 'starshine' ? 3 : 2;
 
     const computeBaseStats = (level: number): { count: number; stamina: number } => {
       if (baseStats[level]) return baseStats[level];
       
-      // Starshine has unique stamina progression, Normal and Soul are linear (n-1)*10
-      const jumpStamina = mode === 'starshine' 
-        ? (60 + (level - 2) * 30) 
-        : (level - 1) * 10;
+      let jumpStamina = 0;
+      if (mode === 'starshine') {
+        jumpStamina = (60 + (level - 2) * 30);
+      } else if (mode === 'colored') {
+        // Colored dust: Level 2 = 90, Level 3 = 120, etc.
+        jumpStamina = 90 + (level - 2) * 30;
+      } else {
+        // Normal and Soul: Linear (n-1)*10
+        jumpStamina = (level - 1) * 10;
+      }
 
       const prev = computeBaseStats(level - 1);
       let totalCount = synthesisRule * prev.count;
       let totalStamina = (synthesisRule * prev.stamina) + jumpStamina;
       
-      if (extrasConfig[level]) {
-        extrasConfig[level].forEach(extraLvl => {
+      // Handle extras
+      let levelExtras: number[] = [];
+      if (mode === 'colored' && level >= 3) {
+        // Colored Spirit Dust Rule: Level n needs 2 of Level n-1 + 1 of Level n-2
+        levelExtras = [level - 2];
+      } else if (extrasConfig[level]) {
+        levelExtras = extrasConfig[level];
+      }
+
+      if (levelExtras.length > 0) {
+        levelExtras.forEach(extraLvl => {
           const extra = computeBaseStats(extraLvl);
           totalCount += extra.count;
           totalStamina += extra.stamina;
         });
       }
+
       baseStats[level] = { count: totalCount, stamina: totalStamina };
       return baseStats[level];
     };
 
-    const prefillCap = mode === 'normal' ? 20 : (mode === 'starshine' ? 12 : 10);
+    const prefillCap = 20; // Safe upper bound for calculation
     for (let i = 1; i <= prefillCap; i++) computeBaseStats(i);
 
     const seedPriceTotal = seedValueW * 10000;
@@ -145,11 +163,14 @@ const GemPriceTool = () => {
     const results = [];
     let cumulativeRmb = 0;
     for (let i = 1; i <= maxLevel; i++) {
-      const stats = baseStats[i] || computeBaseStats(i);
+      const stats = baseStats[i];
       const staminaValue = stats.stamina * STAMINA_PER_POINT_VALUE;
       const totalCoins = (stats.count * implicitLv1Price) + staminaValue;
       const rmbValue = (totalCoins / 30000000) * exchangeRateRmb;
       cumulativeRmb += rmbValue;
+
+      // Extract dynamic extra info
+      const dynamicExtras = (mode === 'colored' && i >= 3) ? [i - 2] : (extrasConfig[i] || null);
 
       results.push({ 
         level: i, 
@@ -159,7 +180,7 @@ const GemPriceTool = () => {
         rmbValue,
         cumulativeRmb,
         isSeed: i === seedLevel,
-        extras: extrasConfig[i] || null
+        extras: dynamicExtras
       });
     }
     return results;
@@ -189,25 +210,21 @@ const GemPriceTool = () => {
 
             <div>
               <label className="text-xs font-black text-gray-400 uppercase tracking-widest block mb-4">宝石类型</label>
-              <div className="grid grid-cols-3 gap-2 bg-gray-100 p-1.5 rounded-2xl">
-                <button 
-                  onClick={() => handleModeChange('normal')}
-                  className={`py-2 rounded-xl text-[10px] font-black transition-all ${mode === 'normal' ? 'bg-white shadow-md text-amber-600' : 'text-gray-500'}`}
-                >
-                  普通宝石
-                </button>
-                <button 
-                  onClick={() => handleModeChange('starshine')}
-                  className={`py-2 rounded-xl text-[10px] font-black transition-all ${mode === 'starshine' ? 'bg-white shadow-md text-purple-600' : 'text-gray-500'}`}
-                >
-                  星辉石
-                </button>
-                <button 
-                  onClick={() => handleModeChange('soul')}
-                  className={`py-2 rounded-xl text-[10px] font-black transition-all ${mode === 'soul' ? 'bg-white shadow-md text-cyan-600' : 'text-gray-500'}`}
-                >
-                  精魄灵石
-                </button>
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-2 bg-gray-100 p-1.5 rounded-2xl">
+                {[
+                  { id: 'normal', label: '普通', color: 'text-amber-600' },
+                  { id: 'starshine', label: '星辉石', color: 'text-purple-600' },
+                  { id: 'soul', label: '精魄灵石', color: 'text-cyan-600' },
+                  { id: 'colored', label: '五色灵尘', color: 'text-rose-600' }
+                ].map(item => (
+                  <button 
+                    key={item.id}
+                    onClick={() => handleModeChange(item.id as GemMode)}
+                    className={`py-2 px-1 rounded-xl text-[10px] font-black transition-all ${mode === item.id ? 'bg-white shadow-md ' + item.color : 'text-gray-500'}`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -238,7 +255,7 @@ const GemPriceTool = () => {
               <input 
                 type="range"
                 min="1"
-                max={mode === 'normal' ? 20 : (mode === 'starshine' ? 12 : 10)}
+                max={mode === 'normal' ? 20 : (mode === 'starshine' ? 12 : (mode === 'soul' ? 10 : 15))}
                 value={maxLevel}
                 onChange={(e) => setMaxLevel(parseInt(e.target.value))}
                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
@@ -248,26 +265,30 @@ const GemPriceTool = () => {
             <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 space-y-3">
               <div className="flex gap-2">
                 <Info className="w-5 h-5 text-blue-400 shrink-0" />
-                <p className="text-[11px] text-blue-600 leading-relaxed font-bold uppercase">规则简介</p>
+                <p className="text-[11px] text-blue-600 leading-relaxed font-bold uppercase">当前模式规则</p>
               </div>
               <div className="text-[10px] text-blue-500/80 leading-relaxed space-y-2">
-                {mode === 'soul' ? (
+                {mode === 'colored' ? (
                   <>
-                    <p>• <b>合成基准</b>：1-7级精魄灵石每2个合成1个高级。</p>
-                    <p>• <b>额外消耗</b>：8级+1颗L3，9级+1颗L6，10级+1颗L8。</p>
-                    <p>• <b>体力规则</b>：合成体力消耗与普通宝石一致 [(n-1)*10]。</p>
+                    <p>• <b>合成基准</b>：2级=2个L1；3级及以上=2个(n-1)+1个(n-2)。</p>
+                    <p>• <b>体力规则</b>：2级消耗90点，之后每级增加30点体力。</p>
+                    <p>• <b>等级上限</b>：最高支持15级计算。</p>
+                  </>
+                ) : mode === 'soul' ? (
+                  <>
+                    <p>• <b>合成基准</b>：1-7级灵石每2个合成1个高级。</p>
+                    <p>• <b>额外消耗</b>：8级+L3，9级+L6，10级+L8。</p>
+                    <p>• <b>体力规则</b>：合成体力消耗 (n-1)*10。</p>
                   </>
                 ) : mode === 'starshine' ? (
                   <>
                     <p>• <b>合成基准</b>：每3个星辉石合成1个高级。</p>
-                    <p>• <b>额外消耗</b>：9-11级合成需要指定额外副石。</p>
                     <p>• <b>体力规则</b>：非线性体力公式 [60+(n-2)*30]。</p>
                   </>
                 ) : (
                   <>
                     <p>• <b>合成基准</b>：每2个宝石合成1个高级。</p>
-                    <p>• <b>额外消耗</b>：12-20级合成需要数颗副石。</p>
-                    <p>• <b>体力规则</b>：线性体力公式 [(n-1)*10]。</p>
+                    <p>• <b>额外消耗</b>：12-20级合成需要副宝石辅助。</p>
                   </>
                 )}
               </div>
@@ -279,8 +300,8 @@ const GemPriceTool = () => {
           <section className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden h-full flex flex-col">
             <div className="p-8 border-b border-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <h3 className="font-black text-gray-800 flex items-center gap-3 text-lg uppercase">
-                <TrendingUp className={`w-6 h-6 ${mode === 'soul' ? 'text-cyan-500' : mode === 'starshine' ? 'text-purple-500' : 'text-amber-500'}`} />
-                {mode === 'soul' ? '精魄灵石' : mode === 'starshine' ? '星辉石' : '普通宝石'} 价值全景
+                <TrendingUp className={`w-6 h-6 ${mode === 'soul' ? 'text-cyan-500' : mode === 'starshine' ? 'text-purple-500' : mode === 'colored' ? 'text-rose-500' : 'text-amber-500'}`} />
+                {mode === 'soul' ? '精魄灵石' : mode === 'starshine' ? '星辉石' : mode === 'colored' ? '五色灵尘' : '普通宝石'} 价值全景
               </h3>
               <div className="flex gap-2">
                 <div className="px-3 py-1 bg-gray-50 rounded-full text-[10px] font-black text-gray-400 uppercase border border-gray-100">自动同步联动</div>
@@ -310,17 +331,26 @@ const GemPriceTool = () => {
                       <tr key={row.level} className={`transition-colors group ${row.isSeed ? 'bg-indigo-50/40' : 'hover:bg-gray-50/50'}`}>
                         <td className="px-6 py-5">
                           <div className="flex items-center gap-3">
-                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-sm relative ${mode === 'normal' ? 'bg-amber-100 text-amber-700' : mode === 'starshine' ? 'bg-purple-100 text-purple-700' : 'bg-cyan-100 text-cyan-700'}`}>
+                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-sm relative ${
+                               mode === 'normal' ? 'bg-amber-100 text-amber-700' : 
+                               mode === 'starshine' ? 'bg-purple-100 text-purple-700' : 
+                               mode === 'soul' ? 'bg-cyan-100 text-cyan-700' : 
+                               'bg-rose-100 text-rose-700'
+                             }`}>
                                {row.level}
                                {row.extras && (
                                  <div className="absolute -top-1 -right-1 group-hover:scale-110 transition-transform">
-                                    <div className={`w-4 h-4 ${mode === 'soul' ? 'bg-cyan-500' : 'bg-indigo-500'} rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white`}>!</div>
+                                    <div className={`w-4 h-4 ${mode === 'soul' ? 'bg-cyan-500' : mode === 'colored' ? 'bg-rose-500' : 'bg-indigo-500'} rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white`}>!</div>
                                  </div>
                                )}
                              </div>
                              <div className="flex flex-col">
-                               <span className="font-bold text-gray-700">{mode === 'soul' ? '灵石' : mode === 'starshine' ? '星辉' : '宝石'}</span>
-                               {row.extras && <span className="text-[9px] text-indigo-400 font-black uppercase">副石:{row.extras.join('/')}</span>}
+                               <span className="font-bold text-gray-700">{
+                                mode === 'soul' ? '灵石' : 
+                                mode === 'starshine' ? '星辉' : 
+                                mode === 'colored' ? '灵尘' : '宝石'}
+                               </span>
+                               {row.extras && <span className="text-[9px] text-indigo-400 font-black uppercase">副石:L{row.extras.join('/L')}</span>}
                              </div>
                           </div>
                         </td>
@@ -698,7 +728,7 @@ const Dashboard = ({ onSelectTool }: { onSelectTool: (id: string) => void }) => 
   const tools = [
     { id: 'beast-equip', name: '召唤兽装备计算器', desc: '精准计算BB装综合属性，量化装备点数价值。', icon: <Activity className="w-8 h-8 text-indigo-500" />, color: 'bg-indigo-50' },
     { id: 'spirit-calc', name: '灵饰价值分析', desc: '支持各部位主属性及多条副属性收益计算。', icon: <Gem className="w-8 h-8 text-purple-500" />, color: 'bg-purple-50' },
-    { id: 'gem-calc', name: '宝石全景计算器', desc: '支持普通宝石/星辉石/精魄灵石全等级推算。', icon: <Diamond className="w-8 h-8 text-amber-500" />, color: 'bg-amber-50' },
+    { id: 'gem-calc', name: '宝石全景计算器', desc: '支持普通宝石/星辉石/精魄灵石/五色灵尘全推算。', icon: <Diamond className="w-8 h-8 text-amber-500" />, color: 'bg-amber-50' },
   ];
 
   return (
