@@ -96,7 +96,7 @@ const GemPriceTool = () => {
     if (newMode === 'starshine') setMaxLevel(12);
     else if (newMode === 'soul') setMaxLevel(10);
     else if (newMode === 'colored') setMaxLevel(15);
-    else setMaxLevel(15);
+    else if (newMode === 'normal' && maxLevel < 15) setMaxLevel(15);
 
     if (newMode === 'starshine' && seedLevel > 12) setSeedLevel(1);
     if (newMode === 'soul' && seedLevel > 10) setSeedLevel(1);
@@ -117,42 +117,49 @@ const GemPriceTool = () => {
       if (baseStats[level]) return baseStats[level];
       
       let jumpStamina = 0;
-      if (mode === 'starshine') {
-        jumpStamina = (60 + (level - 2) * 30);
-      } else if (mode === 'colored') {
-        // Colored dust: Level 2 = 90, Level 3 = 120, etc.
-        jumpStamina = 90 + (level - 2) * 30;
+      let totalCount = 0;
+      let totalStamina = 0;
+
+      if (mode === 'colored') {
+        // Special case for level 2
+        if (level === 2) {
+          jumpStamina = 90;
+          const prev = computeBaseStats(1);
+          totalCount = 2 * prev.count;
+          totalStamina = (2 * prev.stamina) + jumpStamina;
+        } else {
+          // Level n = 2*L(n-1) + 1*L(n-2)
+          jumpStamina = 90 + (level - 2) * 30;
+          const prev1 = computeBaseStats(level - 1);
+          const prev2 = computeBaseStats(level - 2);
+          totalCount = (2 * prev1.count) + prev2.count;
+          totalStamina = (2 * prev1.stamina) + prev2.stamina + jumpStamina;
+        }
       } else {
-        // Normal and Soul: Linear (n-1)*10
-        jumpStamina = (level - 1) * 10;
-      }
+        // Starshine has unique stamina progression, Normal and Soul are linear (n-1)*10
+        jumpStamina = mode === 'starshine' 
+          ? (60 + (level - 2) * 30) 
+          : (level - 1) * 10;
 
-      const prev = computeBaseStats(level - 1);
-      let totalCount = synthesisRule * prev.count;
-      let totalStamina = (synthesisRule * prev.stamina) + jumpStamina;
-      
-      // Handle extras
-      let levelExtras: number[] = [];
-      if (mode === 'colored' && level >= 3) {
-        // Colored Spirit Dust Rule: Level n needs 2 of Level n-1 + 1 of Level n-2
-        levelExtras = [level - 2];
-      } else if (extrasConfig[level]) {
-        levelExtras = extrasConfig[level];
-      }
-
-      if (levelExtras.length > 0) {
-        levelExtras.forEach(extraLvl => {
-          const extra = computeBaseStats(extraLvl);
-          totalCount += extra.count;
-          totalStamina += extra.stamina;
-        });
+        const prev = computeBaseStats(level - 1);
+        totalCount = synthesisRule * prev.count;
+        totalStamina = (synthesisRule * prev.stamina) + jumpStamina;
+        
+        const levelExtras = extrasConfig[level] || [];
+        if (levelExtras.length > 0) {
+          levelExtras.forEach(extraLvl => {
+            const extra = computeBaseStats(extraLvl);
+            totalCount += extra.count;
+            totalStamina += extra.stamina;
+          });
+        }
       }
 
       baseStats[level] = { count: totalCount, stamina: totalStamina };
       return baseStats[level];
     };
 
-    const prefillCap = 20; // Safe upper bound for calculation
+    const prefillCap = 20; 
     for (let i = 1; i <= prefillCap; i++) computeBaseStats(i);
 
     const seedPriceTotal = seedValueW * 10000;
@@ -163,14 +170,14 @@ const GemPriceTool = () => {
     const results = [];
     let cumulativeRmb = 0;
     for (let i = 1; i <= maxLevel; i++) {
-      const stats = baseStats[i];
+      const stats = baseStats[i] || computeBaseStats(i);
       const staminaValue = stats.stamina * STAMINA_PER_POINT_VALUE;
       const totalCoins = (stats.count * implicitLv1Price) + staminaValue;
       const rmbValue = (totalCoins / 30000000) * exchangeRateRmb;
       cumulativeRmb += rmbValue;
 
-      // Extract dynamic extra info
-      const dynamicExtras = (mode === 'colored' && i >= 3) ? [i - 2] : (extrasConfig[i] || null);
+      // Extract extra info for display (Special: Hide LX display for Colored mode)
+      const displayExtras = mode === 'colored' ? null : (extrasConfig[i] || null);
 
       results.push({ 
         level: i, 
@@ -180,7 +187,7 @@ const GemPriceTool = () => {
         rmbValue,
         cumulativeRmb,
         isSeed: i === seedLevel,
-        extras: dynamicExtras
+        extras: displayExtras
       });
     }
     return results;
@@ -270,25 +277,24 @@ const GemPriceTool = () => {
               <div className="text-[10px] text-blue-500/80 leading-relaxed space-y-2">
                 {mode === 'colored' ? (
                   <>
-                    <p>• <b>合成基准</b>：2级=2个L1；3级及以上=2个(n-1)+1个(n-2)。</p>
-                    <p>• <b>体力规则</b>：2级消耗90点，之后每级增加30点体力。</p>
-                    <p>• <b>等级上限</b>：最高支持15级计算。</p>
+                    <p>• <b>合成基准</b>：2级消耗2个L1；3级及以后每级需要2个(n-1)级+1个(n-2)级。</p>
+                    <p>• <b>体力公式</b>：2级消耗90点，之后每级增加30点 [90+(n-2)*30]。</p>
+                    <p>• <b>累计统计</b>：最后一列展示从1级一路打到当前等级的总RMB预算。</p>
                   </>
                 ) : mode === 'soul' ? (
                   <>
                     <p>• <b>合成基准</b>：1-7级灵石每2个合成1个高级。</p>
                     <p>• <b>额外消耗</b>：8级+L3，9级+L6，10级+L8。</p>
-                    <p>• <b>体力规则</b>：合成体力消耗 (n-1)*10。</p>
                   </>
                 ) : mode === 'starshine' ? (
                   <>
                     <p>• <b>合成基准</b>：每3个星辉石合成1个高级。</p>
-                    <p>• <b>体力规则</b>：非线性体力公式 [60+(n-2)*30]。</p>
+                    <p>• <b>体力公式</b>：非线性 [60+(n-2)*30]。</p>
                   </>
                 ) : (
                   <>
                     <p>• <b>合成基准</b>：每2个宝石合成1个高级。</p>
-                    <p>• <b>额外消耗</b>：12-20级合成需要副宝石辅助。</p>
+                    <p>• <b>额外消耗</b>：高级宝石(12级+)需要副石参与合成。</p>
                   </>
                 )}
               </div>
@@ -304,7 +310,7 @@ const GemPriceTool = () => {
                 {mode === 'soul' ? '精魄灵石' : mode === 'starshine' ? '星辉石' : mode === 'colored' ? '五色灵尘' : '普通宝石'} 价值全景
               </h3>
               <div className="flex gap-2">
-                <div className="px-3 py-1 bg-gray-50 rounded-full text-[10px] font-black text-gray-400 uppercase border border-gray-100">自动同步联动</div>
+                <div className="px-3 py-1 bg-gray-50 rounded-full text-[10px] font-black text-gray-400 uppercase border border-gray-100">联动自动计算</div>
               </div>
             </div>
 
@@ -340,7 +346,7 @@ const GemPriceTool = () => {
                                {row.level}
                                {row.extras && (
                                  <div className="absolute -top-1 -right-1 group-hover:scale-110 transition-transform">
-                                    <div className={`w-4 h-4 ${mode === 'soul' ? 'bg-cyan-500' : mode === 'colored' ? 'bg-rose-500' : 'bg-indigo-500'} rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white`}>!</div>
+                                    <div className={`w-4 h-4 ${mode === 'soul' ? 'bg-cyan-500' : 'bg-indigo-500'} rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white`}>!</div>
                                  </div>
                                )}
                              </div>
@@ -585,7 +591,7 @@ const SpiritAccessoryTool = () => {
               className="w-full py-5 bg-indigo-600 text-white rounded-3xl font-black text-xl shadow-2xl shadow-indigo-200 hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-center gap-3"
             >
               <Save className="w-6 h-6" />
-              保存当前设置
+              保存当前分析
             </button>
           </section>
         </div>
