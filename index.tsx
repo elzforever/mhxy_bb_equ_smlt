@@ -4,7 +4,8 @@ import {
   Calculator, Settings, RotateCcw, Activity, Coins, Save, Trash2, 
   ArrowDownUp, ArrowUp, ArrowDown, Shirt, Watch, Wind, Download, 
   Upload, Home, LayoutDashboard, Sparkles, BookOpen, ChevronRight,
-  Menu, X, ExternalLink, Gem, Diamond, Swords, ShieldCheck, Users, HelpCircle, Eye, History as HistoryIcon
+  Menu, X, ExternalLink, Gem, Diamond, Swords, ShieldCheck, Users, HelpCircle, Eye, History as HistoryIcon,
+  RefreshCcw, TrendingUp, Layers, Info, Wallet
 } from 'lucide-react';
 
 // --- Types & Interfaces ---
@@ -13,6 +14,7 @@ type ItemType = 'armor' | 'collar' | 'bracer';
 type RaceType = 'human' | 'demon' | 'immortal';
 type SpiritType = 'ring' | 'earring';
 type SubAttrType = 'damage' | 'speed';
+type GemMode = 'normal' | 'starshine';
 
 interface SavedItem {
   id: number;
@@ -75,6 +77,220 @@ const StatInput = ({ label, value, onChange, colorClass, placeholder }: any) => 
     />
   </div>
 );
+
+// --- Tool 3: Gem Price Calculator ---
+
+const GemPriceTool = () => {
+  const [mode, setMode] = useState<GemMode>('normal');
+  const [basePriceW, setBasePriceW] = useState<number>(0); // Unit: 万 (w)
+  const [maxLevel, setMaxLevel] = useState<number>(15);
+  const [exchangeRateRmb, setExchangeRateRmb] = useState<number>(200); // Unit: RMB per 3000w
+
+  const synthesisRule = mode === 'normal' ? 2 : 3;
+  const STAMINA_PER_POINT_VALUE = 100; // 1 stamina = 100 coins
+
+  const gemData = useMemo(() => {
+    const data = [];
+    const basePrice = basePriceW * 10000;
+    
+    // We need a way to calculate cumulative stamina cost
+    // T_n = rule * T_{n-1} + (n-1)*10
+    let cumulativeStamina = 0;
+
+    for (let i = 1; i <= maxLevel; i++) {
+      const count = Math.pow(synthesisRule, i - 1);
+      
+      if (i > 1) {
+        // To make ONE Lv i gem, we need 'synthesisRule' gems of Lv i-1
+        // plus the stamina cost of the final step which is (i-1)*10
+        cumulativeStamina = (synthesisRule * cumulativeStamina) + (i - 1) * 10;
+      } else {
+        cumulativeStamina = 0;
+      }
+
+      const rawMaterialCost = count * basePrice;
+      const staminaValue = cumulativeStamina * STAMINA_PER_POINT_VALUE;
+      const totalCoins = rawMaterialCost + staminaValue;
+      
+      // Conversion: 3000w = exchangeRateRmb
+      const rmbValue = (totalCoins / 30000000) * exchangeRateRmb;
+
+      data.push({ 
+        level: i, 
+        count, 
+        staminaValue,
+        totalCoins,
+        rmbValue
+      });
+    }
+    return data;
+  }, [mode, basePriceW, maxLevel, synthesisRule, exchangeRateRmb]);
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Input Panel */}
+        <div className="lg:w-1/3 space-y-6">
+          <section className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 space-y-8">
+            <h3 className="font-black text-gray-800 flex items-center gap-3 text-lg">
+              <Coins className="w-6 h-6 text-amber-500" />
+              价格与汇率配置
+            </h3>
+
+            <div>
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest block mb-4">合成模式</label>
+              <div className="grid grid-cols-2 gap-2 bg-gray-100 p-1.5 rounded-2xl">
+                <button 
+                  onClick={() => setMode('normal')}
+                  className={`py-3 rounded-xl text-xs font-black transition-all ${mode === 'normal' ? 'bg-white shadow-md text-amber-600' : 'text-gray-500'}`}
+                >
+                  普通宝石 (x2)
+                </button>
+                <button 
+                  onClick={() => setMode('starshine')}
+                  className={`py-3 rounded-xl text-xs font-black transition-all ${mode === 'starshine' ? 'bg-white shadow-md text-purple-600' : 'text-gray-500'}`}
+                >
+                  星辉石 (x3)
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest block">一级基准价 (单位: 万w)</label>
+              <div className="relative group">
+                <input 
+                  type="number"
+                  value={basePriceW === 0 ? '' : basePriceW}
+                  onChange={(e) => setBasePriceW(parseFloat(e.target.value) || 0)}
+                  placeholder="如: 8.5"
+                  className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-amber-400 rounded-2xl font-mono text-2xl font-black outline-none transition-all"
+                />
+                <div className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-300 font-black group-focus-within:text-amber-500 transition-colors">W</div>
+              </div>
+            </div>
+
+            <div className="space-y-4 p-5 bg-amber-50 rounded-2xl border border-amber-100">
+               <label className="text-xs font-black text-amber-700 uppercase tracking-widest flex items-center gap-2 mb-2">
+                 <Wallet className="w-4 h-4" /> 汇率折算 (3000万 : RMB)
+               </label>
+               <div className="flex items-center gap-3">
+                 <div className="flex-1 px-4 py-3 bg-white rounded-xl font-mono font-bold text-amber-900 border border-amber-200">3,000 W</div>
+                 <div className="text-amber-400 font-black">:</div>
+                 <div className="relative flex-1">
+                   <input 
+                    type="number"
+                    value={exchangeRateRmb}
+                    onChange={(e) => setExchangeRateRmb(parseFloat(e.target.value) || 0)}
+                    className="w-full px-4 py-3 bg-white rounded-xl font-mono font-bold text-amber-900 outline-none border border-amber-200 focus:border-amber-500"
+                   />
+                   <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-300 font-black">RMB</div>
+                 </div>
+               </div>
+            </div>
+
+            <div className="space-y-4">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest flex justify-between">
+                <span>最高计算等级</span>
+                <span className="text-amber-600 font-mono font-black">{maxLevel} 级</span>
+              </label>
+              <input 
+                type="range"
+                min="1"
+                max="20"
+                value={maxLevel}
+                onChange={(e) => setMaxLevel(parseInt(e.target.value))}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
+              />
+            </div>
+
+            <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex gap-3">
+              <Info className="w-5 h-5 text-blue-400 shrink-0" />
+              <div className="space-y-1">
+                <p className="text-[11px] text-blue-600 leading-relaxed font-medium">
+                  体力成本：{mode === 'normal' ? '2合1' : '3合1'} 逻辑，每升一级消耗 (n-1)×10 体力。
+                </p>
+                <p className="text-[11px] text-blue-400 italic">计算包含累积合成体力折算 (1体=100钱)。</p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        {/* Results Panel */}
+        <div className="lg:w-2/3">
+          <section className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden h-full flex flex-col">
+            <div className="p-8 border-b border-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <h3 className="font-black text-gray-800 flex items-center gap-3 text-lg">
+                <TrendingUp className="w-6 h-6 text-indigo-500" />
+                宝石价值全景表
+              </h3>
+              <div className="flex gap-2">
+                <div className="px-3 py-1 bg-green-50 rounded-full text-[10px] font-black text-green-600 uppercase border border-green-100">RMB折算</div>
+                <div className="px-3 py-1 bg-amber-50 rounded-full text-[10px] font-black text-amber-600 uppercase border border-amber-100">体力计入</div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-left min-w-[600px]">
+                <thead className="sticky top-0 bg-white shadow-sm z-10 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                  <tr>
+                    <th className="px-6 py-4">等级</th>
+                    <th className="px-6 py-4">所需1级</th>
+                    <th className="px-6 py-4">累积体力损耗</th>
+                    <th className="px-6 py-4">总成本 (游戏币)</th>
+                    <th className="px-6 py-4 text-right">总成本 (RMB)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {gemData.map((row) => (
+                    <tr key={row.level} className="hover:bg-gray-50/50 transition-colors group">
+                      <td className="px-6 py-5">
+                        <div className="flex items-center gap-3">
+                           <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-sm ${mode === 'normal' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>
+                             {row.level}
+                           </div>
+                           <span className="font-bold text-gray-700">级</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className="font-mono text-xs text-gray-500 font-bold">
+                          {row.count.toLocaleString()} <span className="text-[10px] opacity-40 ml-1 font-black">个</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className="text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg inline-flex items-center gap-1 border border-amber-100/50">
+                          {row.staminaValue > 10000 ? `${(row.staminaValue/10000).toFixed(2)}w` : row.staminaValue}
+                        </div>
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className="font-mono text-sm font-black text-gray-800">
+                          {(row.totalCoins / 10000).toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-[10px] text-gray-400">万</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-5 text-right">
+                        <div className="font-mono text-xl font-black text-green-600 bg-green-50/50 px-3 py-1 rounded-xl inline-block border border-green-100 shadow-sm">
+                          <span className="text-xs mr-1 opacity-50 font-medium">¥</span>
+                          {row.rmbValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {basePriceW === 0 && (
+                <div className="py-24 text-center space-y-4">
+                  <div className="bg-gray-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-100">
+                    <Layers className="w-10 h-10 text-gray-200" />
+                  </div>
+                  <p className="text-sm font-black text-gray-300 uppercase tracking-widest">请在左侧输入1级宝石单价(w)进行分析</p>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // --- Tool 2: Spirit Accessory Calculator ---
 
@@ -140,6 +356,21 @@ const SpiritAccessoryTool = () => {
     };
     setSavedItems([newItem, ...savedItems]);
     setHistoryTab(spiritType);
+  };
+
+  const loadFromHistory = (item: SavedSpiritItem) => {
+    setRace(item.race);
+    setSpiritType(item.spiritType);
+    setMainAttr({ ...item.mainAttr });
+    setSubAttrs(item.subAttrs.map(a => ({ ...a })));
+    setGemLevel(item.gemLevel);
+    setPrice(item.price);
+    // Scroll back to top if needed or show feedback
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const deleteRecord = (id: number) => {
+    setSavedItems(prev => prev.filter(p => p.id !== id));
   };
 
   const filteredAndSortedHistory = useMemo(() => {
@@ -425,16 +656,16 @@ const SpiritAccessoryTool = () => {
                 <ArrowDownUp className="w-3 h-3" />
                 {sortOrder === 'points' ? '高分优先' : '最新优先'}
               </button>
-              <button onClick={() => setSavedItems([])} className="p-2.5 bg-red-50 text-red-300 hover:text-red-500 rounded-xl transition-colors" title="清空历史"><Trash2 className="w-5 h-5"/></button>
+              <button onClick={() => { if(confirm('确定要清空所有记录吗？')) setSavedItems([]); }} className="p-2.5 bg-red-50 text-red-300 hover:text-red-500 rounded-xl transition-colors" title="清空历史"><Trash2 className="w-5 h-5"/></button>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
            {filteredAndSortedHistory.map(item => (
              <div 
                 key={item.id} 
-                className="relative group cursor-help animate-in slide-in-from-bottom-4 duration-300"
+                className="relative group animate-in slide-in-from-bottom-4 duration-300"
                 onMouseEnter={() => setHoveredId(item.id)}
                 onMouseLeave={() => setHoveredId(null)}
               >
@@ -448,9 +679,19 @@ const SpiritAccessoryTool = () => {
                        <div className="text-xl font-black font-mono text-indigo-600 leading-tight">{item.totalPoints.toFixed(1)} <span className="text-[11px] text-gray-300 ml-1">PTS</span></div>
                      </div>
                   </div>
-                  <div className="text-right">
-                     <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">性价比单价</div>
-                     <div className="text-base font-black font-mono text-green-600">¥{item.pricePerPoint.toFixed(2)}</div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                       <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">性价比单价</div>
+                       <div className="text-base font-black font-mono text-green-600">¥{item.pricePerPoint.toFixed(2)}</div>
+                    </div>
+                    <div className="flex flex-col gap-1 ml-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                       <button onClick={() => loadFromHistory(item)} className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-600 hover:text-white transition-all" title="导入到计算器">
+                          <RefreshCcw className="w-3.5 h-3.5" />
+                       </button>
+                       <button onClick={() => deleteRecord(item.id)} className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all" title="删除此记录">
+                          <Trash2 className="w-3.5 h-3.5" />
+                       </button>
+                    </div>
                   </div>
                 </div>
 
@@ -479,7 +720,7 @@ const SpiritAccessoryTool = () => {
                       </div>
                       <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-between">
                          <span className="text-[10px] text-gray-300 italic">保存于 {new Date(item.id).toLocaleTimeString()}</span>
-                         <span className="text-[10px] font-bold text-indigo-300">数据仅供参考</span>
+                         <span className="text-[10px] font-bold text-indigo-300">点击卡片侧边按钮导入</span>
                       </div>
                     </div>
                   </div>
@@ -547,6 +788,14 @@ const SummonedBeastEquipTool = () => {
     };
     setSavedItems(prev => [newItem, ...prev]);
     setActiveTab(type);
+  };
+
+  const loadEquipFromHistory = (item: SavedItem) => {
+    setGrowth(item.growth);
+    setSpeedQual(item.speedQual);
+    setPrice(item.price);
+    setStats({ ...item.stats });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const sortedItems = useMemo(() => {
@@ -717,7 +966,10 @@ const SummonedBeastEquipTool = () => {
                     <td className="px-6 py-4 font-mono text-gray-600">¥{item.price.toLocaleString()}</td>
                     <td className="px-6 py-4 font-black text-green-600 font-mono text-sm">¥{item.pricePerPoint.toFixed(2)}</td>
                     <td className="px-6 py-4 text-right">
-                       <button onClick={() => setSavedItems(prev => prev.filter(p => p.id !== item.id))} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 className="w-4 h-4"/></button>
+                       <div className="flex items-center justify-end gap-2">
+                         <button onClick={() => loadEquipFromHistory(item)} className="p-2 text-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="回填数据"><RefreshCcw className="w-4 h-4"/></button>
+                         <button onClick={() => setSavedItems(prev => prev.filter(p => p.id !== item.id))} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 className="w-4 h-4"/></button>
+                       </div>
                     </td>
                   </tr>
                 ))}
@@ -751,6 +1003,14 @@ const Dashboard = ({ onSelectTool }: { onSelectTool: (id: string) => void }) => 
       active: true
     },
     { 
+      id: 'gem-calc', 
+      name: '宝石成本计算器', 
+      desc: '包含体力合成损耗、全等级成本预估，支持人民币实时汇率折算。', 
+      icon: <Coins className="w-8 h-8 text-amber-500" />,
+      color: 'bg-amber-50',
+      active: true
+    },
+    { 
       id: 'summon-sim', 
       name: '炼妖概率模拟器', 
       desc: '模拟炼妖合宠，计算翻页宠、神宠产出概率。', 
@@ -770,7 +1030,7 @@ const Dashboard = ({ onSelectTool }: { onSelectTool: (id: string) => void }) => 
       id: 'market-trend', 
       name: '藏宝阁价格趋势', 
       desc: '分析跨服物价走势，定位装备合理价格区间。', 
-      icon: <Coins className="w-8 h-8 text-rose-500" />,
+      icon: <TrendingUp className="w-8 h-8 text-rose-500" />,
       color: 'bg-rose-50',
       active: false
     }
@@ -846,7 +1106,18 @@ const App = () => {
     { id: 'home', icon: <Home className="w-5 h-5"/>, label: '概览主页' },
     { id: 'beast-equip', icon: <Activity className="w-5 h-5"/>, label: 'BB装价值计算' },
     { id: 'spirit-calc', icon: <Gem className="w-5 h-5"/>, label: '灵饰价值计算' },
+    { id: 'gem-calc', icon: <Diamond className="w-5 h-5"/>, label: '宝石成本计算' },
   ];
+
+  const renderCurrentTool = () => {
+    switch (currentTool) {
+      case 'home': return <Dashboard onSelectTool={setCurrentTool} />;
+      case 'spirit-calc': return <SpiritAccessoryTool />;
+      case 'gem-calc': return <GemPriceTool />;
+      case 'beast-equip': return <SummonedBeastEquipTool />;
+      default: return <Dashboard onSelectTool={setCurrentTool} />;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex overflow-hidden">
@@ -882,7 +1153,7 @@ const App = () => {
             <div className="bg-gray-50 rounded-2xl p-4">
               <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">当前版本</p>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-gray-600">v1.4.1-Alpha</span>
+                <span className="text-xs font-bold text-gray-600">v1.5.1-Alpha</span>
                 <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                   <span className="text-[10px] text-gray-500">Online</span>
@@ -926,13 +1197,7 @@ const App = () => {
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-4 lg:p-8">
            <div className="max-w-7xl mx-auto">
-              {currentTool === 'home' ? (
-                <Dashboard onSelectTool={setCurrentTool} />
-              ) : currentTool === 'spirit-calc' ? (
-                <SpiritAccessoryTool />
-              ) : (
-                <SummonedBeastEquipTool />
-              )}
+              {renderCurrentTool()}
            </div>
         </div>
         
