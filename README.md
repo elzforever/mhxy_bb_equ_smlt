@@ -6,6 +6,9 @@
 
 ## 常见问题排查
 
+**Q: 启动后页面样式全丢了 (Styles missing)？**
+A: 这是因为 Vite 的入口文件 (`src/main.tsx`) 没有导入 CSS。请确保您的 `src/main.tsx` 文件最顶部包含 `import './index.css';`。我们已在最新的代码更新中修复了此问题，请重新复制 `index.tsx` 的内容覆盖您的本地文件。
+
 **Q: 执行 `npx tailwindcss init -p` 报错 "could not determine executable to run"？**
 A: 这是因为 npm 默认安装了 Tailwind CSS v4，而 v4 的命令行工具已变更。请参考下方的 **"步骤 3"**，我们已更新命令以强制安装 `tailwindcss@3` 版本。
 

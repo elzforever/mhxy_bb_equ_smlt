@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
+import './index.css'; // 关键修正：必须引入包含 Tailwind 指令的 CSS 文件
 import { 
   Calculator, Settings, RotateCcw, Activity, Coins, Save, Trash2, 
   ArrowDownUp, ArrowUp, ArrowDown, Shirt, Watch, Wind, Download, 
