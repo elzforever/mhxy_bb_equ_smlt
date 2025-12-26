@@ -6,14 +6,14 @@
 
 ## 常见问题排查
 
+**Q: 报错 `[plugin:vite:import-analysis] Failed to resolve import ...`?**
+A: 这是因为项目采用了模块化结构。**您必须在本地的 `src` 目录下手动创建对应的文件夹和文件**。请严格按照下文 **"步骤 4"** 的目录结构进行操作。例如，`Dashboard.tsx` 必须放在 `src/features/` 文件夹内。
+
 **Q: 启动后页面样式全丢了 (Styles missing)？**
-A: 这是因为 Vite 的入口文件 (`src/main.tsx`) 没有导入 CSS。请确保您的 `src/main.tsx` 文件最顶部包含 `import './index.css';`。我们已在最新的代码更新中修复了此问题，请重新复制 `index.tsx` 的内容覆盖您的本地文件。
+A: 请确保 `src/main.tsx` (即替换后的入口文件) 顶部包含 `import './index.css';`。
 
 **Q: 执行 `npx tailwindcss init -p` 报错 "could not determine executable to run"？**
-A: 这是因为 npm 默认安装了 Tailwind CSS v4，而 v4 的命令行工具已变更。请参考下方的 **"步骤 3"**，我们已更新命令以强制安装 `tailwindcss@3` 版本。
-
-**Q: 启动后页面显示 "Vite + React" 和一个计数器，而不是工具箱？**
-A: 这是因为您没有替换正确的入口文件。Vite 项目默认加载 `src/main.tsx`。请务必执行下方的 **"步骤 4.1：替换核心逻辑"**，将生成的 `index.tsx` 代码完整覆盖到本地的 `src/main.tsx` 文件中。
+A: 请参考下方的 **"步骤 3"**，确保安装的是 `tailwindcss@3` 版本。
 
 ---
 
@@ -23,60 +23,40 @@ A: 这是因为您没有替换正确的入口文件。Vite 项目默认加载 `s
 
 我们推荐使用 [Vite](https://vitejs.dev/) 来快速搭建现代化的 React 开发环境。
 
-打开终端（Terminal）或命令行工具，运行以下命令：
+打开终端（Terminal），运行以下命令：
 
 ```bash
-# 创建一个名为 mhxy-toolbox 的新项目，使用 React + TypeScript 模板
+# 创建项目
 npm create vite@latest mhxy-toolbox -- --template react-ts
 
-# 进入项目目录
+# 进入目录
 cd mhxy-toolbox
 
-# 安装基础依赖
+# 安装依赖
 npm install
 ```
 
-### 2. 安装项目依赖
-
-本项目使用了 `lucide-react` 作为图标组件库，需要单独安装：
+### 2. 安装额外依赖
 
 ```bash
 npm install lucide-react
 ```
 
-### 3. 配置 Tailwind CSS (关键修正)
+### 3. 配置 Tailwind CSS
 
-为了兼容本项目的配置方式，我们需要安装 Tailwind CSS v3 版本。
-
-**3.1 安装依赖:**
-
-请运行以下命令（**注意 `@3`**，这将覆盖您之前安装的 v4 版本）：
+**3.1 安装 v3 版本:**
 
 ```bash
 npm install -D tailwindcss@3 postcss autoprefixer
 ```
 
-**3.2 初始化配置:**
+**3.2 初始化:**
 
 ```bash
 npx tailwindcss init -p
 ```
 
-*如果上述命令仍然报错，您可以跳过此命令，手动在项目根目录创建以下两个文件：*
-
-1.  创建 `postcss.config.js`，内容如下：
-    ```javascript
-    export default {
-      plugins: {
-        tailwindcss: {},
-        autoprefixer: {},
-      },
-    }
-    ```
-2.  创建 `tailwind.config.js`，内容见下一步。
-
-**3.3 配置模板路径:**
-打开（或创建）项目根目录下的 `tailwind.config.js`，将内容修改为：
+**3.3 修改 `tailwind.config.js`:**
 
 ```javascript
 /** @type {import('tailwindcss').Config} */
@@ -92,63 +72,73 @@ export default {
 }
 ```
 
-**3.4 添加 Tailwind 指令:**
-找到 `src/index.css` 文件，**删除所有原有内容**，替换为以下代码：
+**3.4 修改 `src/index.css`:**
+清空原内容，填入：
 
 ```css
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* 自定义滚动条样式 */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
-  border-radius: 10px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #cbd5e1;
-}
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
 ```
 
-### 4. 迁移核心代码 (关键步骤)
+### 4. 迁移核心代码 (关键步骤 - 请仔细阅读)
 
-请严格按照以下文件名对应关系进行代码复制：
+由于代码已拆分，请在您的 **`src`** 目录下按照以下结构创建文件。
 
-**4.1 替换核心逻辑 (`src/main.tsx`):**
+**4.1 创建文件夹**
+在 `src` 目录下创建两个新文件夹：
+*   `src/features`
+*   `src/components`
+
+**4.2 创建通用文件**
+在 `src` 根目录下创建以下文件，并将本页面提供的对应代码粘贴进去：
+*   `src/types.ts`
+*   `src/constants.ts`
+*   `src/utils.ts`
+
+**4.3 创建组件文件**
+将对应的代码粘贴到新建的文件中：
+*   `src/components/Shared.tsx`
+
+**4.4 创建功能模块文件**
+将对应的代码粘贴到 `src/features/` 文件夹下的文件中：
+*   `src/features/Dashboard.tsx`
+*   `src/features/SummonedBeastSim.tsx`
+*   `src/features/SummonedBeastEquipCalculator.tsx`
+*   `src/features/SpiritAccessoryCalculator.tsx`
+*   `src/features/GemPriceCalculator.tsx`
+
+**4.5 替换入口文件**
 *   **源文件**: 本页面提供的 `index.tsx` 代码。
 *   **目标文件**: 本地项目中的 `src/main.tsx`。
-*   **操作**: 打开本地的 `src/main.tsx`，**清空所有内容**，然后将本页面 `index.tsx` 的全部代码粘贴进去。
-    *   *解释：原代码中已经包含了 `createRoot(...).render(...)` 的启动逻辑，所以直接替换 `main.tsx` 即可生效。替换后，原有的 `src/App.tsx` 将不再被使用，您可以将其删除。*
+*   **操作**: 清空本地 `src/main.tsx` 的内容，将 `index.tsx` 的代码完整粘贴进去。
 
-**4.2 更新 HTML 标题 (`index.html`):**
-*   打开项目根目录下的 `index.html`。
-*   修改 `<title>` 标签内容为：
-    ```html
-    <title>梦幻高级工具箱 - 召唤兽装备数据中心</title>
-    ```
+> **最终目录结构应如下所示：**
+> ```
+> src/
+> ├── components/
+> │   └── Shared.tsx
+> ├── features/
+> │   ├── Dashboard.tsx
+> │   ├── GemPriceCalculator.tsx
+> │   ├── SpiritAccessoryCalculator.tsx
+> │   ├── SummonedBeastEquipCalculator.tsx
+> │   └── SummonedBeastSim.tsx
+> ├── constants.ts
+> ├── index.css
+> ├── main.tsx  (代码来自 index.tsx)
+> ├── types.ts
+> ├── utils.ts
+> └── vite-env.d.ts
+> ```
 
 ### 5. 启动项目
-
-完成上述步骤后，在终端运行：
 
 ```bash
 npm run dev
 ```
-
-终端将显示访问地址（通常为 `http://localhost:5173/`）。在浏览器中打开该地址，即可看到完整的工具箱界面。
-
-## 构建与发布
-
-如果您需要将项目部署到生产环境（如 Nginx、Vercel 或 GitHub Pages）：
-
-```bash
-npm run build
-```
-
-构建完成后，`dist` 目录中将生成优化后的静态文件，您可以直接部署该目录的内容。
