@@ -6,6 +6,9 @@
 
 ## 常见问题排查
 
+**Q: 执行 `npx tailwindcss init -p` 报错 "could not determine executable to run"？**
+A: 这是因为 npm 默认安装了 Tailwind CSS v4，而 v4 的命令行工具已变更。请参考下方的 **"步骤 3"**，我们已更新命令以强制安装 `tailwindcss@3` 版本。
+
 **Q: 启动后页面显示 "Vite + React" 和一个计数器，而不是工具箱？**
 A: 这是因为您没有替换正确的入口文件。Vite 项目默认加载 `src/main.tsx`。请务必执行下方的 **"步骤 4.1：替换核心逻辑"**，将生成的 `index.tsx` 代码完整覆盖到本地的 `src/main.tsx` 文件中。
 
@@ -38,18 +41,39 @@ npm install
 npm install lucide-react
 ```
 
-### 3. 配置 Tailwind CSS
+### 3. 配置 Tailwind CSS (关键修正)
 
-为了获得最佳的样式表现，需要在本地配置 Tailwind CSS。
+为了兼容本项目的配置方式，我们需要安装 Tailwind CSS v3 版本。
 
 **3.1 安装依赖:**
+
+请运行以下命令（**注意 `@3`**，这将覆盖您之前安装的 v4 版本）：
+
 ```bash
-npm install -D tailwindcss postcss autoprefixer
+npm install -D tailwindcss@3 postcss autoprefixer
+```
+
+**3.2 初始化配置:**
+
+```bash
 npx tailwindcss init -p
 ```
 
-**3.2 配置模板路径:**
-打开项目根目录下的 `tailwind.config.js`，将 `content` 数组修改为：
+*如果上述命令仍然报错，您可以跳过此命令，手动在项目根目录创建以下两个文件：*
+
+1.  创建 `postcss.config.js`，内容如下：
+    ```javascript
+    export default {
+      plugins: {
+        tailwindcss: {},
+        autoprefixer: {},
+      },
+    }
+    ```
+2.  创建 `tailwind.config.js`，内容见下一步。
+
+**3.3 配置模板路径:**
+打开（或创建）项目根目录下的 `tailwind.config.js`，将内容修改为：
 
 ```javascript
 /** @type {import('tailwindcss').Config} */
@@ -65,7 +89,7 @@ export default {
 }
 ```
 
-**3.3 添加 Tailwind 指令:**
+**3.4 添加 Tailwind 指令:**
 找到 `src/index.css` 文件，**删除所有原有内容**，替换为以下代码：
 
 ```css
