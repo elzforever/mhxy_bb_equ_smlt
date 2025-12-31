@@ -97,6 +97,26 @@ export const StatInput = ({ label, value, onChange, colorClass, placeholder, dis
   </div>
 );
 
+export const StyledSelect = ({ label, value, onChange, className, children, disabled }: any) => (
+  <div className="w-full">
+    {label && <label className={\`text-[10px] font-black uppercase tracking-widest mb-1 block \${disabled ? 'text-gray-300' : 'text-gray-400'}\`}>{label}</label>}
+    <div className="relative">
+      <select
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        className={\`w-full px-3 py-2 pr-10 rounded-xl border-2 outline-none transition-all font-bold text-sm appearance-none cursor-pointer 
+        \${disabled 
+          ? 'bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed' 
+          : (className || 'bg-gray-50 border-gray-100 text-gray-700 hover:border-gray-200 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100')}\`}
+      >
+        {children}
+      </select>
+      <ChevronDown className={\`w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none \${disabled ? 'text-gray-300' : 'text-gray-400'}\`} />
+    </div>
+  </div>
+);
+
 export const CollapsibleSection = ({ title, icon: Icon, children, defaultOpen = false }: any) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
@@ -379,6 +399,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Diamond, Trash2, Save, Activity } from 'lucide-react';
 import { RACE_FACTORS } from '../constants';
 import { RaceType, SpiritType, SubAttrType } from '../types';
+import { StyledSelect } from '../components/Shared';
 
 const SpiritAccessoryTool = () => {
   const [race, setRace] = useState<RaceType>('human');
@@ -431,31 +452,31 @@ const SpiritAccessoryTool = () => {
         <div className="lg:w-1/2 bg-white p-8 rounded-3xl shadow-sm border border-gray-100 space-y-6">
             <h3 className="font-black text-gray-800 flex gap-2"><Diamond className="w-6 h-6 text-purple-600"/>灵饰配置</h3>
             <div className="grid grid-cols-2 gap-4">
-              <select value={race} onChange={e => setRace(e.target.value as RaceType)} className="p-3 bg-gray-50 rounded-xl font-bold">
+              <StyledSelect value={race} onChange={(e:any) => setRace(e.target.value as RaceType)} className="bg-gray-50 font-bold">
                  <option value="human">人族</option><option value="demon">魔族</option><option value="immortal">仙族</option>
-              </select>
-              <select value={spiritType} onChange={e => setSpiritType(e.target.value as SpiritType)} className="p-3 bg-gray-50 rounded-xl font-bold">
+              </StyledSelect>
+              <StyledSelect value={spiritType} onChange={(e:any) => setSpiritType(e.target.value as SpiritType)} className="bg-gray-50 font-bold">
                  <option value="ring">戒指</option><option value="earring">耳饰</option>
-              </select>
+              </StyledSelect>
             </div>
             {/* Input fields simplified for brevity in this installer script, but functional */}
             <div className="space-y-2">
                <label className="text-xs font-black text-gray-400 uppercase">主属性</label>
-               <input type="number" value={mainAttr.value} onChange={e => setMainAttr({...mainAttr, value: parseFloat(e.target.value)||0})} className="w-full p-3 bg-gray-100 rounded-xl font-bold" placeholder="主属性数值" />
+               <input type="number" value={mainAttr.value} onChange={e => setMainAttr({...mainAttr, value: parseFloat(e.target.value)||0})} className="w-full p-3 bg-gray-100 rounded-xl font-bold border-2 border-transparent outline-none focus:border-indigo-200" placeholder="主属性数值" />
             </div>
             <div className="space-y-2">
                <label className="text-xs font-black text-gray-400 uppercase">下排属性 (最多3条)</label>
                {subAttrs.map((attr, i) => (
                  <div key={i} className="flex gap-2">
-                    <select value={attr.type} onChange={e => { const n = [...subAttrs]; n[i].type = e.target.value as any; setSubAttrs(n); }} className="bg-gray-100 p-2 rounded-lg font-bold">
+                    <StyledSelect value={attr.type} onChange={(e:any) => { const n = [...subAttrs]; n[i].type = e.target.value as any; setSubAttrs(n); }} className="bg-gray-100 rounded-lg font-bold">
                       <option value="damage">伤害</option><option value="speed">速度</option>
-                    </select>
-                    <input type="number" value={attr.value} onChange={e => { const n = [...subAttrs]; n[i].value = parseFloat(e.target.value)||0; setSubAttrs(n); }} className="flex-1 bg-gray-100 p-2 rounded-lg font-bold" />
+                    </StyledSelect>
+                    <input type="number" value={attr.value} onChange={e => { const n = [...subAttrs]; n[i].value = parseFloat(e.target.value)||0; setSubAttrs(n); }} className="flex-1 bg-gray-100 p-2 rounded-lg font-bold border-2 border-transparent outline-none focus:border-indigo-200" />
                  </div>
                ))}
                {subAttrs.length < 3 && <button onClick={() => setSubAttrs([...subAttrs, {type:'damage', value:0}])} className="text-sm font-bold text-indigo-600">+ 添加</button>}
             </div>
-            <input type="number" value={price} onChange={e => setPrice(parseFloat(e.target.value)||0)} className="w-full p-4 bg-amber-50 rounded-xl font-black text-amber-900" placeholder="价格" />
+            <input type="number" value={price} onChange={e => setPrice(parseFloat(e.target.value)||0)} className="w-full p-4 bg-amber-50 rounded-xl font-black text-amber-900 border-2 border-transparent outline-none focus:border-amber-200" placeholder="价格" />
             <button onClick={saveItem} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold">保存分析</button>
         </div>
         <div className="lg:w-1/2 bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center justify-center">
@@ -523,7 +544,7 @@ export default GemPriceTool;
   'src/features/SummonedBeastSim.tsx': `
 import React, { useState, useMemo } from 'react';
 import { Settings, Activity, Save, Heart, Zap, Swords, Wind, ShieldCheck, Coins, Sparkles } from 'lucide-react';
-import { StatInput, CollapsibleSection } from '../components/Shared';
+import { StatInput, CollapsibleSection, StyledSelect } from '../components/Shared';
 import { trunc } from '../utils';
 
 const SummonedBeastSimTool = () => {
@@ -544,13 +565,31 @@ const SummonedBeastSimTool = () => {
   // (Simulated logic for brevity)
   const results = { hp: 5000, mp: 2000, attack: 2500, defense: 1400, speed: 800, fashang: 1500, fafang: 1200 };
 
+  const updateC = (k:string, v:any) => setC({...c, [k]:v});
+
   return (
     <div className="p-8 bg-white rounded-3xl shadow-sm border border-gray-100">
       <h2 className="font-black text-xl mb-4 flex items-center gap-2"><Activity className="text-emerald-500"/> 属性模拟器</h2>
-      <div className="grid grid-cols-2 gap-4">
-        <StatInput label="等级" value={c.level} onChange={(v:any)=>setC({...c, level:parseInt(v)||0})} colorClass="bg-gray-50"/>
-        <StatInput label="成长" value={c.chengzhang} onChange={(v:any)=>setC({...c, chengzhang:parseFloat(v)||0})} colorClass="bg-gray-50"/>
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <StatInput label="等级" value={c.level} onChange={(v:any)=>updateC('level',parseInt(v)||0)} colorClass="bg-gray-50"/>
+        <StatInput label="成长" value={c.chengzhang} onChange={(v:any)=>updateC('chengzhang',parseFloat(v)||0)} colorClass="bg-gray-50"/>
       </div>
+      
+      <div className="mb-6">
+        <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">装备配置</h3>
+        <div className="grid grid-cols-3 gap-4">
+           <StyledSelect label="护腕属性1" value={c.huwanAttr1} onChange={(e:any)=>updateC('huwanAttr1',e.target.value)} className="bg-gray-50">
+             <option value="damage">伤害</option><option value="hp">气血</option>
+           </StyledSelect>
+           <StyledSelect label="护腕属性2" value={c.huwanAttr2} onChange={(e:any)=>updateC('huwanAttr2',e.target.value)} className="bg-gray-50">
+             <option value="damage">伤害</option><option value="hp">气血</option>
+           </StyledSelect>
+           <StyledSelect label="护腕灵石" value={c.huwanStoneType} onChange={(e:any)=>updateC('huwanStoneType',e.target.value)} className="bg-orange-50 text-orange-700">
+             <option value="damage">伤害灵石</option><option value="lingli">灵力灵石</option>
+           </StyledSelect>
+        </div>
+      </div>
+
       <div className="mt-8 p-6 bg-gradient-to-br from-emerald-600 to-teal-800 rounded-2xl text-white">
          <div className="text-center font-black text-3xl mb-2">{results.attack} 攻击</div>
          <div className="flex justify-between text-sm font-bold opacity-80 px-4">

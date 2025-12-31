@@ -69,6 +69,27 @@ const StatInput = ({ label, value, onChange, colorClass, placeholder, disabled, 
   </div>
 );
 
+// New Component: Styled Select
+const StyledSelect = ({ label, value, onChange, className, children, disabled }: any) => (
+  <div className="w-full">
+    {label && <label className={`text-[10px] font-black uppercase tracking-widest mb-1 block ${disabled ? 'text-gray-300' : 'text-gray-400'}`}>{label}</label>}
+    <div className="relative">
+      <select
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        className={`w-full px-3 py-2 pr-10 rounded-xl border-2 outline-none transition-all font-bold text-sm appearance-none cursor-pointer 
+        ${disabled 
+          ? 'bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed' 
+          : (className || 'bg-gray-50 border-gray-100 text-gray-700 hover:border-gray-200 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100')}`}
+      >
+        {children}
+      </select>
+      <ChevronDown className={`w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${disabled ? 'text-gray-300' : 'text-gray-400'}`} />
+    </div>
+  </div>
+);
+
 const CollapsibleSection = ({ title, icon: Icon, children, defaultOpen = false }: any) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
@@ -166,6 +187,7 @@ const SummonedBeastSimTool = () => {
   });
 
   // --- Logic Helpers ---
+  const clamp = (val: number, min: number, max: number) => Math.min(Math.max(val, min), max);
   
   // 110 Extra Check
   const is110 = c.lingxing === 110;
@@ -403,30 +425,30 @@ const SummonedBeastSimTool = () => {
           {/* 1. Base Attributes */}
           <CollapsibleSection title="基础属性 Base Attributes" icon={Settings} defaultOpen={true}>
             <div className="grid grid-cols-2 gap-4 mb-4">
-               <StatInput label="等级 Level" value={c.level} onChange={(v:any) => updateC('level', parseInt(v)||0)} colorClass="bg-gray-50 border-gray-200" min={0} max={180} />
-               <StatInput label="灵性 Lingxing" value={c.lingxing} onChange={(v:any) => updateC('lingxing', parseInt(v)||0)} colorClass="bg-gray-50 border-gray-200" min={0} max={110} />
+               <StatInput label="等级 Level" value={c.level} onChange={(v:any) => updateC('level', clamp(parseInt(v)||0, 0, 180))} colorClass="bg-gray-50 border-gray-200" min={0} max={180} />
+               <StatInput label="灵性 Lingxing" value={c.lingxing} onChange={(v:any) => updateC('lingxing', clamp(parseInt(v)||0, 0, 110))} colorClass="bg-gray-50 border-gray-200" min={0} max={110} />
             </div>
             
             <div className="grid grid-cols-2 gap-x-6 gap-y-3">
                <div className="contents">
-                 <StatInput label="体质 Con" value={c.tizhi} onChange={(v:any) => updateC('tizhi', parseInt(v)||0)} colorClass="bg-green-50 border-green-100 text-green-700" />
-                 <StatInput label="110额外(体)" value={c.tizhi110} onChange={(v:any) => updateC('tizhi110', parseInt(v)||0)} disabled={!is110} colorClass="bg-green-50 border-green-100" />
+                 <StatInput label="体质 Con" value={c.tizhi} onChange={(v:any) => updateC('tizhi', Math.max(parseInt(v)||0, 0))} colorClass="bg-green-50 border-green-100 text-green-700" />
+                 <StatInput label="110额外(体)" value={c.tizhi110} onChange={(v:any) => updateC('tizhi110', Math.max(parseInt(v)||0, 0))} disabled={!is110} colorClass="bg-green-50 border-green-100" />
                </div>
                <div className="contents">
-                 <StatInput label="法力 Mag" value={c.fali} onChange={(v:any) => updateC('fali', parseInt(v)||0)} colorClass="bg-blue-50 border-blue-100 text-blue-700" />
-                 <StatInput label="110额外(法)" value={c.fali110} onChange={(v:any) => updateC('fali110', parseInt(v)||0)} disabled={!is110} colorClass="bg-blue-50 border-blue-100" />
+                 <StatInput label="法力 Mag" value={c.fali} onChange={(v:any) => updateC('fali', Math.max(parseInt(v)||0, 0))} colorClass="bg-blue-50 border-blue-100 text-blue-700" />
+                 <StatInput label="110额外(法)" value={c.fali110} onChange={(v:any) => updateC('fali110', Math.max(parseInt(v)||0, 0))} disabled={!is110} colorClass="bg-blue-50 border-blue-100" />
                </div>
                <div className="contents">
-                 <StatInput label="力量 Str" value={c.liliang} onChange={(v:any) => updateC('liliang', parseInt(v)||0)} colorClass="bg-red-50 border-red-100 text-red-700" />
-                 <StatInput label="110额外(力)" value={c.liliang110} onChange={(v:any) => updateC('liliang110', parseInt(v)||0)} disabled={!is110} colorClass="bg-red-50 border-red-100" />
+                 <StatInput label="力量 Str" value={c.liliang} onChange={(v:any) => updateC('liliang', Math.max(parseInt(v)||0, 0))} colorClass="bg-red-50 border-red-100 text-red-700" />
+                 <StatInput label="110额外(力)" value={c.liliang110} onChange={(v:any) => updateC('liliang110', Math.max(parseInt(v)||0, 0))} disabled={!is110} colorClass="bg-red-50 border-red-100" />
                </div>
                <div className="contents">
-                 <StatInput label="耐力 End" value={c.naili} onChange={(v:any) => updateC('naili', parseInt(v)||0)} colorClass="bg-orange-50 border-orange-100 text-orange-700" />
-                 <StatInput label="110额外(耐)" value={c.naili110} onChange={(v:any) => updateC('naili110', parseInt(v)||0)} disabled={!is110} colorClass="bg-orange-50 border-orange-100" />
+                 <StatInput label="耐力 End" value={c.naili} onChange={(v:any) => updateC('naili', Math.max(parseInt(v)||0, 0))} colorClass="bg-orange-50 border-orange-100 text-orange-700" />
+                 <StatInput label="110额外(耐)" value={c.naili110} onChange={(v:any) => updateC('naili110', Math.max(parseInt(v)||0, 0))} disabled={!is110} colorClass="bg-orange-50 border-orange-100" />
                </div>
                <div className="contents">
-                 <StatInput label="敏捷 Agi" value={c.minjie} onChange={(v:any) => updateC('minjie', parseInt(v)||0)} colorClass="bg-cyan-50 border-cyan-100 text-cyan-700" />
-                 <StatInput label="110额外(敏)" value={c.minjie110} onChange={(v:any) => updateC('minjie110', parseInt(v)||0)} disabled={!is110} colorClass="bg-cyan-50 border-cyan-100" />
+                 <StatInput label="敏捷 Agi" value={c.minjie} onChange={(v:any) => updateC('minjie', Math.max(parseInt(v)||0, 0))} colorClass="bg-cyan-50 border-cyan-100 text-cyan-700" />
+                 <StatInput label="110额外(敏)" value={c.minjie110} onChange={(v:any) => updateC('minjie110', Math.max(parseInt(v)||0, 0))} disabled={!is110} colorClass="bg-cyan-50 border-cyan-100" />
                </div>
             </div>
 
@@ -439,28 +461,22 @@ const SummonedBeastSimTool = () => {
           {/* 2. Zizhi & Growth */}
           <CollapsibleSection title="资质与成长 Qualities & Growth" icon={Activity} defaultOpen={true}>
             <div className="grid grid-cols-2 gap-4 mb-4">
-              <StatInput label="攻击资质" value={c.gongjiZizhi} onChange={(v:any) => updateC('gongjiZizhi', parseInt(v)||0)} colorClass="bg-gray-50 border-gray-100" />
-              <div>
-                <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block">上限</label>
-                <select value={c.gongjiMax} onChange={e => updateC('gongjiMax', parseInt(e.target.value))} className="w-full px-3 py-2 rounded-xl border-2 border-gray-100 bg-white font-bold text-sm outline-none">
-                  {[1550, 1600, 1650].map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
+              <StatInput label="攻击资质" value={c.gongjiZizhi} onChange={(v:any) => updateC('gongjiZizhi', Math.max(parseInt(v)||0, 0))} colorClass="bg-gray-50 border-gray-100" />
+              <StyledSelect label="上限" value={c.gongjiMax} onChange={(e:any) => updateC('gongjiMax', parseInt(e.target.value))}>
+                 {[1550, 1600, 1650].map(v => <option key={v} value={v}>{v}</option>)}
+              </StyledSelect>
             </div>
             <div className="grid grid-cols-3 gap-3 mb-4">
-               <StatInput label="防御资质" value={c.fangyuZizhi} onChange={(v:any) => updateC('fangyuZizhi', parseInt(v)||0)} colorClass="bg-gray-50 border-gray-100" />
-               <StatInput label="体力资质" value={c.tiliZizhi} onChange={(v:any) => updateC('tiliZizhi', parseInt(v)||0)} colorClass="bg-gray-50 border-gray-100" />
-               <StatInput label="法力资质" value={c.faliZizhi} onChange={(v:any) => updateC('faliZizhi', parseInt(v)||0)} colorClass="bg-gray-50 border-gray-100" />
-               <StatInput label="速度资质" value={c.suduZizhi} onChange={(v:any) => updateC('suduZizhi', parseInt(v)||0)} colorClass="bg-gray-50 border-gray-100" />
+               <StatInput label="防御资质" value={c.fangyuZizhi} onChange={(v:any) => updateC('fangyuZizhi', Math.max(parseInt(v)||0, 0))} colorClass="bg-gray-50 border-gray-100" />
+               <StatInput label="体力资质" value={c.tiliZizhi} onChange={(v:any) => updateC('tiliZizhi', Math.max(parseInt(v)||0, 0))} colorClass="bg-gray-50 border-gray-100" />
+               <StatInput label="法力资质" value={c.faliZizhi} onChange={(v:any) => updateC('faliZizhi', Math.max(parseInt(v)||0, 0))} colorClass="bg-gray-50 border-gray-100" />
+               <StatInput label="速度资质" value={c.suduZizhi} onChange={(v:any) => updateC('suduZizhi', Math.max(parseInt(v)||0, 0))} colorClass="bg-gray-50 border-gray-100" />
             </div>
              <div className="grid grid-cols-2 gap-4">
-              <StatInput label="成长 Growth" value={c.chengzhang} onChange={(v:any) => updateC('chengzhang', parseFloat(v)||0)} colorClass="bg-gray-50 border-gray-100" step="0.001" max={1.3} />
-              <div>
-                <label className="text-[10px] font-black uppercase text-gray-400 mb-1 block">成长上限</label>
-                <select value={c.chengzhangMax} onChange={e => updateC('chengzhangMax', parseFloat(e.target.value))} className="w-full px-3 py-2 rounded-xl border-2 border-gray-100 bg-white font-bold text-sm outline-none">
+              <StatInput label="成长 Growth" value={c.chengzhang} onChange={(v:any) => updateC('chengzhang', Math.max(parseFloat(v)||0, 0))} colorClass="bg-gray-50 border-gray-100" step="0.001" max={1.3} />
+              <StyledSelect label="成长上限" value={c.chengzhangMax} onChange={(e:any) => updateC('chengzhangMax', parseFloat(e.target.value))}>
                   {[1.184, 1.236, 1.266, 1.277, 1.287, 1.297, 1.3].map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
+              </StyledSelect>
             </div>
           </CollapsibleSection>
 
@@ -523,25 +539,25 @@ const SummonedBeastSimTool = () => {
                <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">护腕 Bracer</h4>
                <div className="space-y-3">
                   <div className="flex gap-2">
-                     <select value={c.huwanAttr1} onChange={e => updateC('huwanAttr1', e.target.value)} className="bg-gray-50 rounded-lg text-xs font-bold p-2 outline-none w-20">
+                     <StyledSelect value={c.huwanAttr1} onChange={(e:any) => updateC('huwanAttr1', e.target.value)} className="w-24">
                        <option value="damage">伤害</option><option value="hp">气血</option><option value="magic">魔法</option><option value="lingli">灵力</option>
                        <option value="tizhi">体质</option><option value="fali">法力</option><option value="liliang">力量</option><option value="naili">耐力</option><option value="minjie">敏捷</option>
-                     </select>
-                     <input type="number" value={c.huwanValue1 || ''} onChange={e => updateC('huwanValue1', parseInt(e.target.value)||0)} className="flex-1 bg-gray-50 rounded-lg px-3 text-sm font-bold outline-none" placeholder="数值" />
+                     </StyledSelect>
+                     <input type="number" value={c.huwanValue1 || ''} onChange={e => updateC('huwanValue1', Math.max(parseInt(e.target.value)||0, 0))} className="flex-1 bg-gray-50 rounded-lg px-3 text-sm font-bold outline-none" placeholder="数值" />
                   </div>
                   <div className="flex gap-2">
-                     <select value={c.huwanAttr2} onChange={e => updateC('huwanAttr2', e.target.value)} className="bg-gray-50 rounded-lg text-xs font-bold p-2 outline-none w-20">
+                     <StyledSelect value={c.huwanAttr2} onChange={(e:any) => updateC('huwanAttr2', e.target.value)} className="w-24">
                        <option value="damage">伤害</option><option value="hp">气血</option><option value="magic">魔法</option><option value="lingli">灵力</option>
                        <option value="tizhi">体质</option><option value="fali">法力</option><option value="liliang">力量</option><option value="naili">耐力</option><option value="minjie">敏捷</option>
-                     </select>
-                     <input type="number" value={c.huwanValue2 || ''} onChange={e => updateC('huwanValue2', parseInt(e.target.value)||0)} className="flex-1 bg-gray-50 rounded-lg px-3 text-sm font-bold outline-none" placeholder="数值" />
+                     </StyledSelect>
+                     <input type="number" value={c.huwanValue2 || ''} onChange={e => updateC('huwanValue2', Math.max(parseInt(e.target.value)||0, 0))} className="flex-1 bg-gray-50 rounded-lg px-3 text-sm font-bold outline-none" placeholder="数值" />
                   </div>
                   <div className="flex gap-2 items-center pt-2">
-                     <select value={c.huwanStoneType} onChange={e => updateC('huwanStoneType', e.target.value)} className="bg-orange-50 text-orange-700 rounded-lg text-xs font-bold p-2 outline-none">
+                     <StyledSelect value={c.huwanStoneType} onChange={(e:any) => updateC('huwanStoneType', e.target.value)} className="w-32 bg-orange-50 text-orange-700">
                        <option value="damage">伤害灵石</option><option value="lingli">灵力灵石</option>
-                     </select>
+                     </StyledSelect>
                      <span className="text-xs font-bold text-gray-400">段数:</span>
-                     <input type="number" value={c.huwanStoneLevel || ''} onChange={e => updateC('huwanStoneLevel', parseInt(e.target.value)||0)} className="w-16 bg-orange-50 text-orange-800 rounded-lg px-2 py-1 text-sm font-bold outline-none text-center" />
+                     <input type="number" value={c.huwanStoneLevel || ''} onChange={e => updateC('huwanStoneLevel', clamp(parseInt(e.target.value)||0, 0, 10))} className="w-16 bg-orange-50 text-orange-800 rounded-lg px-2 py-1 text-sm font-bold outline-none text-center" />
                   </div>
                </div>
              </div>
@@ -549,19 +565,19 @@ const SummonedBeastSimTool = () => {
              {/* Collar */}
              <div className="mb-6 pb-6 border-b border-gray-100">
                <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">项圈 Collar (基础速度)</h4>
-               <input type="number" value={c.xiangquanSpeed || ''} onChange={e => updateC('xiangquanSpeed', parseInt(e.target.value)||0)} className="w-full mb-3 bg-gray-100 rounded-lg px-3 py-2 text-sm font-bold outline-none" placeholder="基础速度" />
+               <input type="number" value={c.xiangquanSpeed || ''} onChange={e => updateC('xiangquanSpeed', Math.max(parseInt(e.target.value)||0, 0))} className="w-full mb-3 bg-gray-100 rounded-lg px-3 py-2 text-sm font-bold outline-none" placeholder="基础速度" />
                <div className="space-y-3">
                   <div className="flex gap-2">
-                     <select value={c.xiangquanAttr1} onChange={e => updateC('xiangquanAttr1', e.target.value)} className="bg-gray-50 rounded-lg text-xs font-bold p-2 outline-none w-20">
+                     <StyledSelect value={c.xiangquanAttr1} onChange={(e:any) => updateC('xiangquanAttr1', e.target.value)} className="w-24">
                         <option value="damage">伤害</option><option value="hp">气血</option><option value="magic">魔法</option><option value="lingli">灵力</option>
                        <option value="tizhi">体质</option><option value="fali">法力</option><option value="liliang">力量</option><option value="naili">耐力</option><option value="minjie">敏捷</option>
-                     </select>
-                     <input type="number" value={c.xiangquanValue1 || ''} onChange={e => updateC('xiangquanValue1', parseInt(e.target.value)||0)} className="flex-1 bg-gray-50 rounded-lg px-3 text-sm font-bold outline-none" placeholder="数值" />
+                     </StyledSelect>
+                     <input type="number" value={c.xiangquanValue1 || ''} onChange={e => updateC('xiangquanValue1', Math.max(parseInt(e.target.value)||0, 0))} className="flex-1 bg-gray-50 rounded-lg px-3 text-sm font-bold outline-none" placeholder="数值" />
                   </div>
                    <div className="flex gap-2 items-center pt-2">
                      <span className="bg-cyan-50 text-cyan-700 rounded-lg text-xs font-bold p-2">速度灵石</span>
                      <span className="text-xs font-bold text-gray-400">段数:</span>
-                     <input type="number" value={c.xiangquanStoneLevel || ''} onChange={e => updateC('xiangquanStoneLevel', parseInt(e.target.value)||0)} className="w-16 bg-cyan-50 text-cyan-800 rounded-lg px-2 py-1 text-sm font-bold outline-none text-center" />
+                     <input type="number" value={c.xiangquanStoneLevel || ''} onChange={e => updateC('xiangquanStoneLevel', clamp(parseInt(e.target.value)||0, 0, 10))} className="w-16 bg-cyan-50 text-cyan-800 rounded-lg px-2 py-1 text-sm font-bold outline-none text-center" />
                   </div>
                </div>
              </div>
@@ -569,21 +585,21 @@ const SummonedBeastSimTool = () => {
              {/* Armor */}
              <div>
                <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">铠甲 Armor (基础防御)</h4>
-               <input type="number" value={c.kaijiaDefense || ''} onChange={e => updateC('kaijiaDefense', parseInt(e.target.value)||0)} className="w-full mb-3 bg-gray-100 rounded-lg px-3 py-2 text-sm font-bold outline-none" placeholder="基础防御" />
+               <input type="number" value={c.kaijiaDefense || ''} onChange={e => updateC('kaijiaDefense', Math.max(parseInt(e.target.value)||0, 0))} className="w-full mb-3 bg-gray-100 rounded-lg px-3 py-2 text-sm font-bold outline-none" placeholder="基础防御" />
                <div className="space-y-3">
                   <div className="flex gap-2">
-                     <select value={c.kaijiaAttr1} onChange={e => updateC('kaijiaAttr1', e.target.value)} className="bg-gray-50 rounded-lg text-xs font-bold p-2 outline-none w-20">
+                     <StyledSelect value={c.kaijiaAttr1} onChange={(e:any) => updateC('kaijiaAttr1', e.target.value)} className="w-24">
                        <option value="damage">伤害</option><option value="hp">气血</option><option value="magic">魔法</option><option value="lingli">灵力</option>
                        <option value="tizhi">体质</option><option value="fali">法力</option><option value="liliang">力量</option><option value="naili">耐力</option><option value="minjie">敏捷</option>
-                     </select>
-                     <input type="number" value={c.kaijiaValue1 || ''} onChange={e => updateC('kaijiaValue1', parseInt(e.target.value)||0)} className="flex-1 bg-gray-50 rounded-lg px-3 text-sm font-bold outline-none" placeholder="数值" />
+                     </StyledSelect>
+                     <input type="number" value={c.kaijiaValue1 || ''} onChange={e => updateC('kaijiaValue1', Math.max(parseInt(e.target.value)||0, 0))} className="flex-1 bg-gray-50 rounded-lg px-3 text-sm font-bold outline-none" placeholder="数值" />
                   </div>
                   <div className="flex gap-2 items-center pt-2">
-                     <select value={c.kaijiaStoneType} onChange={e => updateC('kaijiaStoneType', e.target.value)} className="bg-green-50 text-green-700 rounded-lg text-xs font-bold p-2 outline-none">
+                     <StyledSelect value={c.kaijiaStoneType} onChange={(e:any) => updateC('kaijiaStoneType', e.target.value)} className="w-32 bg-green-50 text-green-700">
                        <option value="hp">气血灵石</option><option value="defense">防御灵石</option>
-                     </select>
+                     </StyledSelect>
                      <span className="text-xs font-bold text-gray-400">段数:</span>
-                     <input type="number" value={c.kaijiaStoneLevel || ''} onChange={e => updateC('kaijiaStoneLevel', parseInt(e.target.value)||0)} className="w-16 bg-green-50 text-green-800 rounded-lg px-2 py-1 text-sm font-bold outline-none text-center" />
+                     <input type="number" value={c.kaijiaStoneLevel || ''} onChange={e => updateC('kaijiaStoneLevel', clamp(parseInt(e.target.value)||0, 0, 10))} className="w-16 bg-green-50 text-green-800 rounded-lg px-2 py-1 text-sm font-bold outline-none text-center" />
                   </div>
                </div>
              </div>
@@ -592,24 +608,24 @@ const SummonedBeastSimTool = () => {
           {/* 6. Neidan */}
           <CollapsibleSection title="内丹加成 Neidan" icon={Gem}>
              <div className="mb-4">
-               <StatInput label="坐骑成长 (影响内丹)" value={c.zuoqi} onChange={(v:any) => updateC('zuoqi', parseFloat(v)||0)} colorClass="bg-purple-50 border-purple-100" step="0.01" max={2.4} />
+               <StatInput label="坐骑成长 (影响内丹)" value={c.zuoqi} onChange={(v:any) => updateC('zuoqi', Math.max(parseFloat(v)||0, 0))} colorClass="bg-purple-50 border-purple-100" step="0.01" max={2.4} />
              </div>
              <div className="grid grid-cols-2 gap-4 mb-4">
-               <StatInput label="迅敏 (速度/伤害)" value={c.xunmin} onChange={(v:any) => updateC('xunmin', parseInt(v)||0)} colorClass="bg-gray-50 border-gray-100" max={5} />
-               <StatInput label="静岳 (气血/灵力)" value={c.jingyue} onChange={(v:any) => updateC('jingyue', parseInt(v)||0)} colorClass="bg-gray-50 border-gray-100" max={5} />
-               <StatInput label="矫健 (气血/速度)" value={c.jiaoji} onChange={(v:any) => updateC('jiaoji', parseInt(v)||0)} colorClass="bg-gray-50 border-gray-100" max={5} />
-               <StatInput label="灵光 (法伤)" value={c.lingguang} onChange={(v:any) => updateC('lingguang', parseInt(v)||0)} colorClass="bg-gray-50 border-gray-100" max={5} />
+               <StatInput label="迅敏 (速度/伤害)" value={c.xunmin} onChange={(v:any) => updateC('xunmin', clamp(parseInt(v)||0, 0, 5))} colorClass="bg-gray-50 border-gray-100" max={5} />
+               <StatInput label="静岳 (气血/灵力)" value={c.jingyue} onChange={(v:any) => updateC('jingyue', clamp(parseInt(v)||0, 0, 5))} colorClass="bg-gray-50 border-gray-100" max={5} />
+               <StatInput label="矫健 (气血/速度)" value={c.jiaoji} onChange={(v:any) => updateC('jiaoji', clamp(parseInt(v)||0, 0, 5))} colorClass="bg-gray-50 border-gray-100" max={5} />
+               <StatInput label="灵光 (法伤)" value={c.lingguang} onChange={(v:any) => updateC('lingguang', clamp(parseInt(v)||0, 0, 5))} colorClass="bg-gray-50 border-gray-100" max={5} />
              </div>
              <div className="p-3 bg-gray-50 rounded-xl">
                <label className="text-xs font-bold text-gray-500 block mb-2">高级内丹</label>
                <div className="flex gap-2">
-                 <select value={c.highNeidanType} onChange={e => updateC('highNeidanType', e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-lg p-2 text-sm font-bold outline-none">
+                 <StyledSelect value={c.highNeidanType} onChange={(e:any) => updateC('highNeidanType', e.target.value)}>
                    <option value="none">无 / 其他</option>
                    <option value="xuanwu">玄武躯 (气血)</option>
                    <option value="longzhou">龙胄铠 (防御)</option>
                    <option value="zhuque">朱雀甲 (法防)</option>
-                 </select>
-                 <input type="number" value={c.highNeidanLevel} onChange={e => updateC('highNeidanLevel', parseInt(e.target.value)||0)} className="w-16 bg-white border border-gray-200 rounded-lg p-2 text-sm font-bold text-center outline-none" max={5} />
+                 </StyledSelect>
+                 <input type="number" value={c.highNeidanLevel} onChange={e => updateC('highNeidanLevel', clamp(parseInt(e.target.value)||0, 0, 5))} className="w-16 bg-white border border-gray-200 rounded-lg p-2 text-sm font-bold text-center outline-none" max={5} />
                </div>
              </div>
           </CollapsibleSection>
@@ -1102,15 +1118,15 @@ const SpiritAccessoryTool = () => {
                 <Diamond className="w-6 h-6 text-purple-600" />
                 灵饰属性配置
               </h3>
-              <select 
+              <StyledSelect 
                 value={race} 
-                onChange={e => setRace(e.target.value as RaceType)} 
-                className="pl-4 pr-8 py-3 bg-indigo-50 text-indigo-700 rounded-xl font-bold outline-none border border-indigo-100 appearance-none text-sm min-w-[160px]"
+                onChange={(e:any) => setRace(e.target.value as RaceType)} 
+                className="bg-indigo-50 text-indigo-700 border-indigo-100"
               >
                 <option value="human">人族 (Str:0.67)</option>
                 <option value="demon">魔族 (Str:0.77)</option>
                 <option value="immortal">仙族 (Str:0.57)</option>
-              </select>
+              </StyledSelect>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1133,23 +1149,23 @@ const SpiritAccessoryTool = () => {
               </div>
               <div>
                 <label className="text-xs font-black text-gray-400 uppercase tracking-widest block mb-3">星辉石等级</label>
-                <select 
+                <StyledSelect 
                   value={gemLevel} 
-                  onChange={e => setGemLevel(parseInt(e.target.value))} 
-                  className="w-full px-4 py-3.5 bg-gray-100 border-none rounded-2xl font-mono text-base font-bold outline-none appearance-none hover:bg-gray-200 transition-colors"
+                  onChange={(e:any) => setGemLevel(parseInt(e.target.value))} 
+                  className="bg-gray-100 border-none hover:bg-gray-200"
                 >
                   {Array.from({length: 13}).map((_, i) => <option key={i} value={i}>{i} 级星辉石</option>)}
-                </select>
+                </StyledSelect>
               </div>
             </div>
 
             <div className="p-6 bg-gradient-to-br from-gray-50 to-white rounded-3xl border-2 border-dashed border-gray-200 relative">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
                 <span className="text-xs font-black text-gray-400 uppercase tracking-widest">上排主属性</span>
-                <select 
+                <StyledSelect 
                   value={mainAttr.type} 
-                  onChange={e => setMainAttr({...mainAttr, type: e.target.value})} 
-                  className="pl-4 pr-10 py-2.5 bg-white border border-gray-200 rounded-xl font-bold text-sm outline-none shadow-sm min-w-[140px]"
+                  onChange={(e:any) => setMainAttr({...mainAttr, type: e.target.value})} 
+                  className="w-40 bg-white shadow-sm"
                 >
                   {spiritType === 'ring' ? (
                     <>
@@ -1162,7 +1178,7 @@ const SpiritAccessoryTool = () => {
                       <option value="m-def">法术防御</option>
                     </>
                   )}
-                </select>
+                </StyledSelect>
               </div>
               <input 
                 type="number" 
@@ -1183,18 +1199,18 @@ const SpiritAccessoryTool = () => {
                <div className="space-y-4">
                  {subAttrs.map((attr, idx) => (
                    <div key={idx} className="flex gap-4 items-center group">
-                      <select 
+                      <StyledSelect 
                         value={attr.type} 
-                        onChange={e => {
+                        onChange={(e:any) => {
                           const newAttrs = [...subAttrs];
                           newAttrs[idx].type = e.target.value as SubAttrType;
                           setSubAttrs(newAttrs);
                         }} 
-                        className="bg-gray-100 px-4 py-3.5 rounded-2xl text-sm font-bold outline-none border-none min-w-[100px]"
+                        className="bg-gray-100 border-none w-32"
                       >
                         <option value="damage">伤害</option>
                         <option value="speed">速度</option>
-                      </select>
+                      </StyledSelect>
                       <input 
                         type="number" 
                         value={attr.value || ''} 
