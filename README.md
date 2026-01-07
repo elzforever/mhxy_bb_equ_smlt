@@ -27,6 +27,25 @@
 
 ---
 
+## 🐳 Docker 容器化部署
+
+如果您偏好使用 Docker 进行部署，请确保已安装 Docker 环境。
+
+1. **构建镜像**:
+   ```bash
+   docker build -t mhxy-toolbox .
+   ```
+
+2. **启动容器**:
+   ```bash
+   docker run -d -p 8080:80 --name mhxy-toolbox-app mhxy-toolbox
+   ```
+
+3. **访问应用**:
+   打开浏览器访问 [http://localhost:8080](http://localhost:8080)
+
+---
+
 ## 功能列表
 
 *   **召唤兽装备计算器** (`features/SummonedBeastEquipCalculator.tsx`): 包含历史记录、性价比分析、全属性录入。
